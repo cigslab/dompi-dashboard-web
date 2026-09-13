@@ -1,0 +1,1749 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dompi Dashboard</title>
+
+    <link rel="stylesheet" href="../static/style.css">
+</head>
+<body>
+
+    <div class="dashboard">
+
+        <aside class="sidebar">
+            <div class="brand">
+                <div class="brand-icon">◉</div>
+
+                <div>
+                    <h2>Dompi</h2>
+                    <span>dompet pintar</span>
+                </div>
+            </div>
+
+            <nav class="menu">
+                <a href="#" class="menu-item active" id="overviewMenu">Overview</a>
+                <a href="#" class="menu-item" id="transactionMenu">Transaksi</a>
+                <a href="#" class="menu-item" id="analyticsMenu">Analitik</a>
+                <a href="#" class="menu-item">Kategori</a>
+                <a href="#" class="menu-item">Laporan</a>
+            </nav>
+
+            <div class="sidebar-bottom">
+                <a href="#" class="menu-item">Pengaturan</a>
+                <a href="#" class="menu-item">Bantuan</a>
+            </div>
+        </aside>
+
+        <main class="main-content">
+        <div id="overviewPage">    
+
+            <header class="topbar">
+                <div>
+                    <p class="welcome">Halo,</p>
+                    <h1>Cigs</h1>
+                    <p class="subtitle">
+                        Ini ringkasan keuangan kamu hari ini.
+                    </p>
+                </div>
+
+                <div class="profile">
+
+                    <button class="profile-button" id="profileButton">
+                        <div class="avatar">C</div>
+
+                        <div class="profile-info">
+                            <strong>Cigs</strong>
+                            <span>Pro</span>
+                        </div>
+
+                        <span class="profile-arrow">⌄</span>
+                    </button>
+
+                    <div class="profile-dropdown" id="profileDropdown">
+                        <button class="logout-button" id="logoutButton">
+                            Keluar
+                        </button>
+                    </div>
+
+                </div>
+            </header>
+
+            <section class="summary-grid">
+
+                <div class="summary-card balance-card">
+                    <div class="summary-icon balance-icon">
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <rect x="4" y="7" width="16" height="12" rx="2"></rect>
+                            <path d="M6 7V5.5C6 4.7 6.7 4 7.5 4H17"></path>
+                            <path d="M15.5 11H20V16H15.5C14.1 16 13 14.9 13 13.5C13 12.1 14.1 11 15.5 11Z"></path>
+                            <circle cx="16" cy="13.5" r="0.7"></circle>
+                        </svg>
+                    </div>
+
+                    <div class="summary-info">
+                        <p>Saldo</p>
+                        <h2 id="balance">Rp0</h2>
+                        <span>Saldo saat ini</span>
+                    </div>
+                </div>
+
+                <div class="summary-card income-card">
+                    <div class="summary-icon income-icon">
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M12 20V5"></path>
+                            <path d="M6.5 10.5L12 5L17.5 10.5"></path>
+                        </svg>
+                    </div>
+
+                    <div class="summary-info">
+                        <p>Total Pemasukan</p>
+                        <h2 id="income">Rp0</h2>
+                        <span>Total pemasukan tercatat</span>
+                    </div>
+                </div>
+
+                <div class="summary-card expense-card">
+                    <div class="summary-icon expense-icon">
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M12 4V19"></path>
+                            <path d="M6.5 13.5L12 19L17.5 13.5"></path>
+                        </svg>
+                    </div>
+
+                    <div class="summary-info">
+                        <p>Total Pengeluaran</p>
+                        <h2 id="expense">Rp0</h2>
+                        <span>Total pengeluaran tercatat</span>
+                    </div>
+                </div>
+
+            </section>
+            <section class="content-grid">
+
+<div class="panel expense-donut-panel">
+    <div class="panel-header">
+        <div>
+            <p class="panel-label">Persentase Pengeluaran</p>
+            <h3>Berdasarkan Kategori</h3>
+        </div>
+
+        <select id="donutMonth">
+            <option value="2026-09">September 2026</option>
+        </select>
+    </div>
+
+    <div class="donut-content">
+        <div class="donut-chart-wrap">
+            <canvas id="expenseDonutChart"></canvas>
+
+            <div class="donut-center">
+                <strong id="donutTotal">Rp0</strong>
+                <span>Total Pengeluaran</span>
+            </div>
+        </div>
+
+        <div class="donut-legend" id="donutLegend">
+        </div>
+    </div>
+</div>
+
+    <div class="panel category-panel">
+        <div class="panel-header">
+            <div>
+                <p class="panel-label">Ringkasan Kategori</p>
+                <h3>Pengeluaran terbesar</h3>
+            </div>
+        </div>
+
+        <div class="category-list" id="categoryList">
+            <p>Memuat kategori...</p>
+        </div>
+    </div>
+
+</section>
+            <section class="panel transactions-panel">
+                <div class="panel-header">
+                    <div>
+                        <p class="panel-label">Transaksi</p>
+                        <h3>Transaksi terbaru</h3>
+                    </div>
+
+                    <button class="view-all-button" id="viewAllTransactions">
+                        Lihat semua →
+                    </button>
+                </div>
+
+                <div class="transaction-header">
+                    <span>Tanggal</span>
+                    <span>Kategori</span>
+                    <span>Catatan</span>
+                    <span>Jumlah</span>
+                </div>
+
+                <div class="transaction-list" id="transactionList">
+                    <p>Memuat transaksi...</p>
+                </div>
+            </section>
+            </div>
+
+            <div id="transactionPage" class="page-hidden">
+
+                <header class="page-header">
+                    <div>
+                        <h1>Transaksi</h1>
+                        <p class="subtitle">
+                            Kelola semua pemasukan dan pengeluaran kamu.
+                        </p>
+                    </div>
+
+                    <div class="profile">
+
+                        <button class="profile-button" id="transactionProfileButton">
+                            <div class="avatar">C</div>
+
+                            <div class="profile-info">
+                                <strong>Cigs</strong>
+                                <span>Pro</span>
+                            </div>
+
+                            <span class="profile-arrow">⌄</span>
+                        </button>
+
+                        <div class="profile-dropdown" id="transactionProfileDropdown">
+                            <button class="logout-button">
+                                Keluar dari Dashboard
+                            </button>
+                        </div>
+
+                    </div>
+                </header>
+                </p>                
+                <div class="transaction-toolbar">
+
+                    <div class="transaction-search">
+                        <span>⌕</span>
+                        <input
+                            type="text"
+                            id="transactionSearch"
+                            placeholder="Cari transaksi..."
+                        >
+                    </div>
+
+                    <div class="transaction-period-filter">
+
+                    <select id="transactionMonth">
+                        <option value="date">Custom tanggal...</option>
+                    </select>
+
+                    <div class="date-range-wrapper" id="dateRangeWrapper" hidden>
+
+                        <button
+                            type="button"
+                            class="date-range-button"
+                            id="dateRangeButton"
+                        >
+                            <span id="dateRangeLabel">
+                                Pilih rentang tanggal
+                            </span>
+                        </button>
+
+                        <button
+                            type="button"
+                            id="closeTransactionDate"
+                            class="close-transaction-date"
+                        >
+                            ×
+                        </button>
+
+                        <div
+                            class="date-range-popover"
+                            id="dateRangePopover"
+                            hidden
+                        >
+
+                            <div class="calendar-header">
+                                <button
+                                    type="button"
+                                    id="calendarPrev"
+                                    class="calendar-nav"
+                                >
+                                    ‹
+                                </button>
+
+                                <strong id="calendarTitle">
+                                    September 2026
+                                </strong>
+
+                                <button
+                                    type="button"
+                                    id="calendarNext"
+                                    class="calendar-nav"
+                                >
+                                    ›
+                                </button>
+                            </div>
+
+                            <div class="calendar-weekdays">
+                                <span>Min</span>
+                                <span>Sen</span>
+                                <span>Sel</span>
+                                <span>Rab</span>
+                                <span>Kam</span>
+                                <span>Jum</span>
+                                <span>Sab</span>
+                            </div>
+
+                            <div
+                                class="calendar-grid"
+                                id="calendarGrid"
+                            ></div>
+
+                            <button
+                                type="button"
+                                id="applyDateRange"
+                                class="apply-date-range"
+                                disabled
+                            >
+                                Terapkan
+                            </button>                            
+
+                        </div>
+
+                    </div>
+                    </div>
+
+                    <select id="transactionType">
+                        <option value="all">Semua transaksi</option>
+                        <option value="income">Pemasukan</option>
+                        <option value="expense">Pengeluaran</option>
+                    </select>
+
+                    <button id="resetTransactionFilter" type="button">
+                        Reset filter
+                    </button>
+
+                </div>
+                <section class="transaction-table-card">
+
+                    <div class="transaction-table-header">
+                        <span>Tanggal</span>
+                        <span>Kategori</span>
+                        <span>Catatan</span>
+                        <span>Jenis</span>
+                        <span>Jumlah</span>
+                        <span>Aksi</span>
+                    </div>
+
+                    <div id="allTransactionList" class="all-transaction-list">
+                        <p class="transaction-loading">
+                            Memuat transaksi...
+                        </p>
+                    </div>
+
+                </section>                
+            </div>
+            <div id="analyticsPage" class="page-hidden">
+
+                <header class="page-header analytics-header">
+                    <div>
+                        <h1>Analitik</h1>
+                        <p class="subtitle">
+                            Pahami pola keuangan kamu.
+                        </p>
+                    </div>
+
+                    <select id="analyticsPeriod">
+                        <option value="6">6 bulan terakhir</option>
+                    </select>
+                </header>
+
+                <section class="analytics-cashflow-card">
+
+                    <div class="analytics-card-header">
+                        <div>
+                            <h2>Tren Cashflow</h2>
+                            <p>
+                                Perbandingan pemasukan dan pengeluaran per bulan.
+                            </p>
+                        </div>
+
+                        <div class="analytics-legend">
+                            <span>
+                                <i class="legend-dot income-dot"></i>
+                                Pemasukan
+                            </span>
+
+                            <span>
+                                <i class="legend-dot expense-dot"></i>
+                                Pengeluaran
+                            </span>
+                        </div>
+                    </div>
+
+                    <div class="analytics-chart-area" id="cashflowChartArea">
+
+                        <div class="analytics-chart-placeholder">
+                            <strong>Grafik akan tampil di sini</strong>
+                            <span>
+                                Data cashflow sedang disiapkan.
+                            </span>
+                        </div>
+
+                    </div>
+
+                </section>
+                <section class="analytics-category-card">
+
+                    <div class="analytics-card-header">
+                        <div>
+                            <h2>Pengeluaran per Kategori</h2>
+                            <p>
+                                Distribusi pengeluaran berdasarkan kategori.
+                            </p>
+                        </div>
+
+                        <select id="analyticsCategoryMonth">
+                        </select>
+                    </div>
+
+                    <div class="analytics-category-list">
+
+                        <div class="analytics-category-placeholder">
+                            Data kategori akan tampil di sini.
+                        </div>
+
+                    </div>
+
+                </section>
+            </div>
+                </header>
+
+            </div>
+        </main>
+
+    </div>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+const ctx = document.getElementById("cashflowChart");
+
+const CASHFLOW_API_URL =
+    "https://dompi-dashboard-production.up.railway.app/api/cashflow/8532474600";
+
+async function loadCashflowChart() {
+    try {
+        const response = await fetch(CASHFLOW_API_URL);
+
+        if (!response.ok) {
+            throw new Error("Gagal mengambil data cashflow");
+        }
+
+        const data = await response.json();
+
+        const labels = data.map(item => {
+            const date = new Date(item.date);
+
+            return date.toLocaleDateString("id-ID", {
+                day: "numeric",
+                month: "short"
+            });
+        });
+
+        const incomeData = data.map(item =>
+            Number(item.income)
+        );
+
+        const expenseData = data.map(item =>
+            Number(item.expense)
+        );
+
+        new Chart(ctx, {
+            type: "bar",
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: "Pemasukan",
+                        data: incomeData,
+                        backgroundColor: "#67e58a",
+                        borderRadius: 6
+                    },
+                    {
+                        label: "Pengeluaran",
+                        data: expenseData,
+                        backgroundColor: "#ff6b6b",
+                        borderRadius: 6
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: false
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: {
+                            display: false
+                        },
+                        ticks: {
+                            color: "#8f9894"
+                        }
+                    },
+                    y: {
+                        beginAtZero: true,
+                        grid: {
+                            color: "#202825"
+                        },
+                        ticks: {
+                            color: "#8f9894",
+                            callback: function(value) {
+                                return new Intl.NumberFormat(
+                                    "id-ID",
+                                    {
+                                        notation: "compact",
+                                        maximumFractionDigits: 1
+                                    }
+                                ).format(value);
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+    } catch (error) {
+        console.error("Cashflow chart error:", error);
+    }
+}
+
+loadCashflowChart();
+</script>
+<script>
+const API_URL =
+    "https://dompi-dashboard-production.up.railway.app/api/summary/8532474600";
+
+function formatRupiah(value) {
+    return new Intl.NumberFormat("id-ID", {
+        style: "currency",
+        currency: "IDR",
+        maximumFractionDigits: 0
+    }).format(Number(value));
+}
+
+async function loadSummary() {
+    try {
+        const response = await fetch(API_URL);
+
+        if (!response.ok) {
+            throw new Error("Gagal mengambil data dashboard");
+        }
+
+        const data = await response.json();
+
+        document.getElementById("balance").textContent =
+            formatRupiah(data.balance);
+
+        document.getElementById("income").textContent =
+            formatRupiah(data.income);
+
+        document.getElementById("expense").textContent =
+            formatRupiah(data.expense);
+
+    } catch (error) {
+        console.error("Dashboard error:", error);
+
+        document.getElementById("balance").textContent = "Gagal memuat";
+        document.getElementById("income").textContent = "Gagal memuat";
+        document.getElementById("expense").textContent = "Gagal memuat";
+    }
+}
+
+loadSummary();
+</script>
+<script>
+const CATEGORY_API_URL =
+    "https://dompi-dashboard-production.up.railway.app/api/categories/8532474600";
+
+let expenseDonutChartInstance = null;
+
+async function loadCategories() {
+    const categoryList =
+        document.getElementById("categoryList");
+
+    const donutLegend =
+        document.getElementById("donutLegend");
+
+    const donutTotal =
+        document.getElementById("donutTotal");
+
+    const donutCanvas =
+        document.getElementById("expenseDonutChart");
+
+    try {
+        const response = await fetch(CATEGORY_API_URL);
+
+        if (!response.ok) {
+            throw new Error("Gagal mengambil kategori");
+        }
+
+        const data = await response.json();
+
+        // Ambil hanya data yang memiliki total > 0
+        const expenseData = data.filter(
+            item => Number(item.total) > 0
+        );
+
+        // Jika belum ada pengeluaran
+        if (expenseData.length === 0) {
+            if (categoryList) {
+                categoryList.innerHTML =
+                    "<p>Belum ada pengeluaran.</p>";
+            }
+
+            if (donutLegend) {
+                donutLegend.innerHTML =
+                    "<p>Belum ada pengeluaran.</p>";
+            }
+
+            if (donutTotal) {
+                donutTotal.textContent = "Rp0";
+            }
+
+            if (expenseDonutChartInstance) {
+                expenseDonutChartInstance.destroy();
+                expenseDonutChartInstance = null;
+            }
+
+            return;
+        }
+            const topCategories = expenseData.slice(0, 5);
+
+            const otherCategories = expenseData.slice(5);
+
+            const otherTotal = otherCategories.reduce(
+                (sum, item) => sum + Number(item.total),
+                0
+            );
+
+            const donutData = [...topCategories];
+
+            if (otherTotal > 0) {
+                donutData.push({
+                    category: "Lainnya",
+                    total: otherTotal
+                });
+            }        
+
+        // =========================
+        // TOTAL PENGELUARAN
+        // =========================
+
+        const totalExpense = expenseData.reduce(
+            (sum, item) =>
+                sum + Number(item.total),
+            0
+        );
+
+        if (donutTotal) {
+            donutTotal.textContent =
+                formatRupiah(totalExpense);
+        }
+
+        // =========================
+        // PANEL KATEGORI LAMA
+        // =========================
+
+        if (categoryList) {
+            const highestTotal = Math.max(
+                ...expenseData.map(
+                    item => Number(item.total)
+                )
+            );
+
+            categoryList.innerHTML = "";
+
+            expenseData.slice(0, 5).forEach(item => {
+                const total = Number(item.total);
+
+                const percentage =
+                    (total / highestTotal) * 100;
+
+                const categoryItem =
+                    document.createElement("div");
+
+                categoryItem.className =
+                    "category-item";
+
+                categoryItem.innerHTML = `
+                    <div>
+                        <strong>${item.category}</strong>
+                        <span>${formatRupiah(total)}</span>
+                    </div>
+
+                    <div class="progress">
+                        <div
+                            class="progress-fill"
+                            style="width: ${percentage}%;">
+                        </div>
+                    </div>
+                `;
+
+                categoryList.appendChild(
+                    categoryItem
+                );
+            });
+        }
+
+        // =========================
+        // DATA DONUT
+        // =========================
+
+        const labels = donutData.map(
+            item => item.category
+        );
+
+        const values = donutData.map(
+            item => Number(item.total)
+        );
+
+        const colors = [
+            "#67e58a",
+            "#3b82f6",
+            "#8b5cf6",
+            "#f6c453",
+            "#ff6b6b",
+            "#64748b",
+            "#22c55e",
+            "#06b6d4",
+            "#a78bfa",
+            "#f97316"
+        ];
+
+        // =========================
+        // DONUT LEGEND
+        // =========================
+
+        if (donutLegend) {
+            donutLegend.innerHTML = "";
+
+            donutData.forEach((item, index) => {
+                const total = Number(item.total);
+
+                const percentage =
+                    (total / totalExpense) * 100;
+
+                const legendItem =
+                    document.createElement("div");
+
+                legendItem.className =
+                    "donut-legend-item";
+
+                legendItem.innerHTML = `
+                    <span
+                        class="donut-legend-color"
+                        style="background:
+                        ${colors[index % colors.length]}">
+                    </span>
+
+                    <span class="donut-legend-name">
+                        ${item.category}
+                    </span>
+
+                    <span class="donut-legend-value">
+                        ${percentage.toFixed(1)}%
+                    </span>
+                `;
+
+                donutLegend.appendChild(
+                    legendItem
+                );
+            });
+        }
+
+        // =========================
+        // BUAT DONUT CHART
+        // =========================
+
+        if (!donutCanvas) {
+            console.error(
+                "Canvas expenseDonutChart tidak ditemukan"
+            );
+            return;
+        }
+
+        // Hapus chart lama kalau ada
+        if (expenseDonutChartInstance) {
+            expenseDonutChartInstance.destroy();
+        }
+
+        expenseDonutChartInstance =
+            new Chart(donutCanvas, {
+                type: "doughnut",
+
+                data: {
+                    labels: labels,
+
+                    datasets: [
+                        {
+                            data: values,
+
+                            backgroundColor:
+                                values.map(
+                                    (_, index) =>
+                                        colors[
+                                            index %
+                                            colors.length
+                                        ]
+                                ),
+
+                            borderWidth: 0,
+
+                            hoverOffset: 4
+                        }
+                    ]
+                },
+
+                options: {
+                    responsive: true,
+
+                    maintainAspectRatio: false,
+
+                    cutout: "58%",
+
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const value =
+                                        Number(
+                                            context.raw
+                                        );
+
+                                    const percentage =
+                                        (
+                                            value /
+                                            totalExpense *
+                                            100
+                                        ).toFixed(1);
+
+                                    return (
+                                        context.label +
+                                        ": " +
+                                        formatRupiah(value) +
+                                        " (" +
+                                        percentage +
+                                        "%)"
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+
+    } catch (error) {
+        console.error(
+            "Category error:",
+            error
+        );
+
+        if (categoryList) {
+            categoryList.innerHTML =
+                "<p>Gagal memuat kategori.</p>";
+        }
+
+        if (donutLegend) {
+            donutLegend.innerHTML =
+                "<p>Gagal memuat kategori.</p>";
+        }
+
+        if (donutTotal) {
+            donutTotal.textContent = "Rp0";
+        }
+    }
+}
+
+loadCategories();
+
+</script>
+<script>
+const TRANSACTIONS_API_URL =
+    "https://dompi-dashboard-production.up.railway.app/api/transactions/8532474600";
+
+async function loadTransactions() {
+    const transactionList =
+        document.getElementById("transactionList");
+
+    const allTransactionList =
+        document.getElementById("allTransactionList");
+
+    try {
+        const response = await fetch(TRANSACTIONS_API_URL);
+
+        if (!response.ok) {
+            throw new Error("Gagal mengambil transaksi");
+        }
+        const data = await response.json();
+        const analyticsCategoryMonth =
+            document.getElementById("analyticsCategoryMonth");
+
+        const availableMonths = [
+            ...new Set(
+                data.map(item => {
+                    const date = new Date(item.date);
+
+                    return `${date.getFullYear()}-${String(
+                        date.getMonth() + 1
+                    ).padStart(2, "0")}`;
+                })
+            )
+        ].sort((a, b) => b.localeCompare(a));
+
+        analyticsCategoryMonth.innerHTML =
+            availableMonths.map(monthKey => {
+                const [year, month] = monthKey.split("-");
+
+                const date = new Date(
+                    Number(year),
+                    Number(month) - 1,
+                    1
+                );
+
+                const label =
+                    date.toLocaleDateString("id-ID", {
+                        month: "long",
+                        year: "numeric"
+                    });
+
+                return `
+                    <option value="${monthKey}">
+                        ${label}
+                    </option>
+                `;
+            }).join("");
+        function renderAnalyticsCategories(selectedMonth) {
+            const analyticsCategoryList =
+                document.querySelector(".analytics-category-list");
+
+            const categoryTotals = {};
+
+            data.forEach(item => {
+                const date = new Date(item.date);
+
+                const itemMonth =
+                    `${date.getFullYear()}-${String(
+                        date.getMonth() + 1
+                    ).padStart(2, "0")}`;
+
+                if (
+                    item.type === "income" ||
+                    itemMonth !== selectedMonth
+                ) {
+                    return;
+                }
+
+                const category =
+                    item.analytics_category || "Lainnya";
+
+                categoryTotals[category] =
+                    (categoryTotals[category] || 0) +
+                    Number(item.amount);
+            });
+
+            const categoryEntries =
+    Object.entries(categoryTotals)
+        .sort((a, b) => b[1] - a[1]);
+
+const totalExpense =
+    categoryEntries.reduce(
+        (sum, [, amount]) => sum + amount,
+        0
+    );
+
+if (categoryEntries.length === 0) {
+    analyticsCategoryList.innerHTML = `
+        <div class="analytics-category-placeholder">
+            Belum ada pengeluaran di bulan ini.
+        </div>
+    `;
+
+    return;
+}
+
+analyticsCategoryList.innerHTML =
+    categoryEntries.map(([category, amount]) => {
+        const percentage =
+            totalExpense > 0
+                ? (amount / totalExpense) * 100
+                : 0;
+
+        return `
+            <div class="analytics-category-item">
+
+                <div class="analytics-category-info">
+                    <span class="analytics-category-name">
+                        ${category}
+                    </span>
+
+                    <span class="analytics-category-amount">
+                        ${formatRupiah(amount)}
+                    </span>
+                </div>
+
+                <div class="analytics-category-bar-track">
+                    <div
+                        class="analytics-category-bar"
+                        style="width: ${percentage}%"
+                    ></div>
+                </div>
+
+                <span class="analytics-category-percentage">
+                    ${percentage.toFixed(1)}%
+                </span>
+
+            </div>
+        `;
+    }).join("");
+        }
+        renderAnalyticsCategories(
+            analyticsCategoryMonth.value
+        );      
+        analyticsCategoryMonth.addEventListener("change", () => {
+            renderAnalyticsCategories(
+                analyticsCategoryMonth.value
+            );
+        });                      
+        const monthlyCashflow = {};
+
+        data.forEach(item => {
+            const date = new Date(item.date);
+
+            const key =
+                `${date.getFullYear()}-${String(
+                    date.getMonth() + 1
+                ).padStart(2, "0")}`;
+
+            if (!monthlyCashflow[key]) {
+                monthlyCashflow[key] = {
+                    income: 0,
+                    expense: 0
+                };
+            }
+
+            if (item.type === "income") {
+                monthlyCashflow[key].income += Number(item.amount);
+            } else {
+                monthlyCashflow[key].expense += Number(item.amount);
+            }
+        });
+  
+        const lastSixMonths = [];
+
+        const today = new Date();
+
+        for (let i = 5; i >= 0; i--) {
+            const date = new Date(
+                today.getFullYear(),
+                today.getMonth() - i,
+                1
+            );
+
+            const key =
+                `${date.getFullYear()}-${String(
+                    date.getMonth() + 1
+                ).padStart(2, "0")}`;
+
+            const label =
+                date.toLocaleDateString("id-ID", {
+                    month: "short",
+                    year: "numeric"
+                });
+
+            lastSixMonths.push({
+                key: key,
+                label: label,
+                income: monthlyCashflow[key]?.income || 0,
+                expense: monthlyCashflow[key]?.expense || 0
+            });
+        }
+        const cashflowChartArea =
+            document.getElementById("cashflowChartArea");
+
+        const maxCashflowValue = Math.max(
+            ...lastSixMonths.map(month => month.income),
+            ...lastSixMonths.map(month => month.expense),
+            1
+        );
+
+        cashflowChartArea.innerHTML = `
+            <div class="cashflow-chart-wrapper">
+
+                <div class="cashflow-y-axis">
+                    <span>${formatRupiah(maxCashflowValue)}</span>
+                    <span>${formatRupiah(maxCashflowValue * 0.75)}</span>
+                    <span>${formatRupiah(maxCashflowValue * 0.5)}</span>
+                    <span>${formatRupiah(maxCashflowValue * 0.25)}</span>
+                    <span>Rp0</span>
+                </div>
+
+                <div class="cashflow-chart">
+
+                    <div class="cashflow-grid-lines">
+                        <span></span>
+                        <span></span>
+                        <span></span>
+                        <span></span>
+                        <span></span>
+                    </div>
+
+                    ${lastSixMonths.map(month => {
+                        const incomeHeight =
+                            (month.income / maxCashflowValue) * 100;
+
+                        const expenseHeight =
+                            (month.expense / maxCashflowValue) * 100;
+
+                        return `
+                            <div class="cashflow-month">
+
+                                <div class="cashflow-bars">
+
+                                    <div
+                                        class="cashflow-bar income-bar"
+                                        style="height: ${incomeHeight}%"
+                                        title="Pemasukan: ${formatRupiah(month.income)}"
+                                    ></div>
+
+                                    <div
+                                        class="cashflow-bar expense-bar"
+                                        style="height: ${expenseHeight}%"
+                                        title="Pengeluaran: ${formatRupiah(month.expense)}"
+                                    ></div>
+
+                                </div>
+
+                                <span class="cashflow-month-label">
+                                    ${month.label}
+                                </span>
+
+                            </div>
+                        `;
+                    }).join("")}
+
+                </div>
+
+            </div>
+        `;                   
+        if (data.length === 0) {
+            
+            transactionList.innerHTML =
+                "<p>Belum ada transaksi.</p>";
+
+            allTransactionList.innerHTML =
+                "<p class='transaction-loading'>Belum ada transaksi.</p>";
+
+            return;
+        }
+
+        transactionList.innerHTML = "";
+        allTransactionList.innerHTML = "";
+
+        const recentTransactions = data.slice(0, 5);
+        recentTransactions.forEach(item => {
+
+            const date = new Date(item.date);
+
+            const formattedDate =
+                date.toLocaleDateString("id-ID", {
+                    day: "numeric",
+                    month: "short",
+                    year: "numeric"
+                });
+
+            const sign =
+                item.type === "income" ? "+" : "-";
+
+            // OVERVIEW
+            const transactionItem =
+                document.createElement("div");
+
+            transactionItem.className = "transaction-item";
+
+            transactionItem.innerHTML = `
+                <div class="transaction-date">
+                    ${formattedDate}
+                </div>
+
+                <div class="transaction-category">
+                    ${item.category}
+                </div>
+
+                <div class="transaction-note">
+                    ${item.note || "-"}
+                </div>
+
+                <div class="transaction-amount ${item.type}">
+                    ${sign}${formatRupiah(item.amount)}
+                </div>
+            `;
+
+            transactionList.appendChild(transactionItem);
+            });
+
+            data.forEach(item => {
+                const date = new Date(item.date);
+
+                const formattedDate =
+                    date.toLocaleDateString("id-ID", {
+                        day: "numeric",
+                        month: "short",
+                        year: "numeric"
+                    });
+
+                const sign =
+                    item.type === "income" ? "+" : "-";            
+
+            // HALAMAN TRANSAKSI
+            const fullTransactionItem =
+                document.createElement("div");
+
+            fullTransactionItem.className =
+                "all-transaction-item";
+            fullTransactionItem.dataset.date =
+                String(item.date).slice(0, 10);
+            const typeLabel =
+                item.type === "income"
+                    ? "Pemasukan"
+                    : "Pengeluaran";
+
+            fullTransactionItem.innerHTML = `
+                <div class="transaction-date">
+                    ${formattedDate}
+                </div>
+
+                <div class="transaction-category">
+                    ${item.category}
+                </div>
+
+                <div class="transaction-note">
+                    ${item.note || "-"}
+                </div>
+
+                <div class="transaction-type ${item.type}">
+                    ${typeLabel}
+                </div>
+
+                <div class="transaction-amount ${item.type}">
+                    ${sign}${formatRupiah(item.amount)}
+                </div>
+
+                <div class="transaction-action">
+                    ⋯
+                </div>
+            `;
+
+            allTransactionList.appendChild(fullTransactionItem);
+        });
+
+    } catch (error) {
+        console.error("Transactions error:", error);
+
+        transactionList.innerHTML =
+            "<p>Gagal memuat transaksi.</p>";
+
+        allTransactionList.innerHTML =
+            "<p class='transaction-loading'>Gagal memuat transaksi.</p>";
+    }
+}
+
+loadTransactions();
+
+const overviewMenu = document.getElementById("overviewMenu");
+const transactionMenu = document.getElementById("transactionMenu");
+
+const overviewPage = document.getElementById("overviewPage");
+const transactionPage = document.getElementById("transactionPage");
+
+const analyticsMenu =
+    document.getElementById("analyticsMenu");
+
+const analyticsPage =
+    document.getElementById("analyticsPage");
+
+overviewMenu.addEventListener("click", function (e) {
+    e.preventDefault();
+
+    overviewPage.classList.remove("page-hidden");
+    transactionPage.classList.add("page-hidden");
+    analyticsPage.classList.add("page-hidden");
+
+    overviewMenu.classList.add("active");
+    transactionMenu.classList.remove("active");
+    analyticsMenu.classList.remove("active");
+});
+
+transactionMenu.addEventListener("click", function (e) {
+    e.preventDefault();
+
+    overviewPage.classList.add("page-hidden");
+    transactionPage.classList.remove("page-hidden");
+    analyticsPage.classList.add("page-hidden");
+
+    transactionMenu.classList.add("active");
+    overviewMenu.classList.remove("active");
+    analyticsMenu.classList.remove("active");
+});
+analyticsMenu.addEventListener("click", function (e) {
+    e.preventDefault();
+
+    overviewPage.classList.add("page-hidden");
+    transactionPage.classList.add("page-hidden");
+    analyticsPage.classList.remove("page-hidden");
+
+    analyticsMenu.classList.add("active");
+    overviewMenu.classList.remove("active");
+    transactionMenu.classList.remove("active");
+});
+const viewAllTransactions =
+    document.getElementById("viewAllTransactions");
+
+viewAllTransactions.addEventListener("click", function () {
+    overviewPage.classList.add("page-hidden");
+    transactionPage.classList.remove("page-hidden");
+
+    transactionMenu.classList.add("active");
+    overviewMenu.classList.remove("active");
+    analyticsPage.classList.add("page-hidden");
+    analyticsMenu.classList.remove("active");
+});
+// ==============================
+// FILTER TRANSAKSI
+// ==============================
+
+const transactionSearch =
+    document.getElementById("transactionSearch");
+const transactionType =
+    document.getElementById("transactionType");
+const transactionMonth =
+    document.getElementById("transactionMonth");
+const closeTransactionDate =
+    document.getElementById("closeTransactionDate");
+const resetTransactionFilter =
+    document.getElementById("resetTransactionFilter");
+    
+resetTransactionFilter.addEventListener("click", function () {
+    transactionSearch.value = "";
+    transactionType.value = "all";
+
+    transactionMonth.selectedIndex = 0;
+    transactionMonth.hidden = false;
+
+    dateRangeWrapper.hidden = true;
+    dateRangePopover.hidden = true;
+
+    rangeStart = null;
+    rangeEnd = null;
+
+    dateRangeLabel.textContent =
+        "Pilih rentang tanggal";
+
+    applyDateRange.disabled = true;
+
+    filterTransactions();
+});    
+
+// ==============================
+// DATE RANGE PICKER
+// ==============================
+
+const dateRangeWrapper =
+    document.getElementById("dateRangeWrapper");
+
+const dateRangeButton =
+    document.getElementById("dateRangeButton");
+const applyDateRange =
+    document.getElementById("applyDateRange");
+
+const dateRangeLabel =
+    document.getElementById("dateRangeLabel");
+
+const dateRangePopover =
+    document.getElementById("dateRangePopover");
+
+const calendarGrid =
+    document.getElementById("calendarGrid");
+
+const calendarTitle =
+    document.getElementById("calendarTitle");
+
+const calendarPrev =
+    document.getElementById("calendarPrev");
+
+const calendarNext =
+    document.getElementById("calendarNext");
+
+// Tanggal awal dan akhir yang dipilih user
+let rangeStart = null;
+let rangeEnd = null;
+
+// Bulan yang sedang ditampilkan pada kalender
+let calendarViewDate = new Date();
+applyDateRange.addEventListener("click", function () {
+    if (!rangeStart || !rangeEnd) {
+        return;
+    }
+
+    filterTransactions();
+
+    dateRangePopover.hidden = true;
+});
+// Kembali ke bulan berjalan
+closeTransactionDate.addEventListener("click", function (e) {
+    e.preventDefault();
+    e.stopPropagation();
+
+    dateRangePopover.hidden = true;
+    dateRangeWrapper.hidden = true;
+
+    transactionMonth.selectedIndex = 0;
+    transactionMonth.hidden = false;
+
+    filterTransactions();
+});
+function renderCalendar() {
+    calendarGrid.innerHTML = "";
+
+    const year =
+        calendarViewDate.getFullYear();
+
+    const month =
+        calendarViewDate.getMonth();
+
+    const monthName =
+        calendarViewDate.toLocaleDateString("id-ID", {
+            month: "long",
+            year: "numeric"
+        });
+
+    calendarTitle.textContent = monthName;
+
+    const firstDay =
+        new Date(year, month, 1).getDay();
+
+    const daysInMonth =
+        new Date(year, month + 1, 0).getDate();
+
+    for (let i = 0; i < firstDay; i++) {
+        const emptyCell =
+            document.createElement("div");
+
+        emptyCell.className = "calendar-day empty";
+
+        calendarGrid.appendChild(emptyCell);
+    }
+
+    for (let day = 1; day <= daysInMonth; day++) {
+        const dayButton =
+            document.createElement("button");
+
+        dayButton.type = "button";
+        dayButton.className = "calendar-day";
+        dayButton.textContent = day;
+
+        const currentDate =
+            new Date(year, month, day);
+        if (
+            rangeStart &&
+            currentDate.toDateString() ===
+                rangeStart.toDateString()
+        ) {
+            dayButton.classList.add("range-start");
+        }
+
+        if (
+            rangeEnd &&
+            currentDate.toDateString() ===
+                rangeEnd.toDateString()
+        ) {
+            dayButton.classList.add("range-end");
+        }
+
+        if (
+            rangeStart &&
+            rangeEnd &&
+            currentDate > rangeStart &&
+            currentDate < rangeEnd
+        ) {
+            dayButton.classList.add("in-range");
+        }
+        dayButton.dataset.date =
+            `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+        dayButton.addEventListener("click", function () {
+            const selectedDate =
+                new Date(year, month, day);
+
+            if (!rangeStart || rangeEnd) {
+                rangeStart = selectedDate;
+                rangeEnd = null;
+
+                dateRangeLabel.textContent =
+                    selectedDate.toLocaleDateString("id-ID", {
+                        day: "2-digit",
+                        month: "short",
+                        year: "numeric"
+                    });
+
+            } else {
+                if (selectedDate < rangeStart) {
+                    rangeEnd = rangeStart;
+                    rangeStart = selectedDate;
+                } else {
+                    rangeEnd = selectedDate;
+                }
+
+                const startLabel =
+                    rangeStart.toLocaleDateString("id-ID", {
+                        day: "2-digit",
+                        month: "short",
+                        year: "numeric"
+                    });
+
+                const endLabel =
+                    rangeEnd.toLocaleDateString("id-ID", {
+                        day: "2-digit",
+                        month: "short",
+                        year: "numeric"
+                    });
+
+                dateRangeLabel.textContent =
+                    `${startLabel} - ${endLabel}`;
+            }
+
+            applyDateRange.disabled =
+                !(rangeStart && rangeEnd);
+
+            renderCalendar();
+});
+calendarGrid.appendChild(dayButton);
+    }
+}
+calendarPrev.addEventListener("click", function () {
+    calendarViewDate.setMonth(
+        calendarViewDate.getMonth() - 1
+    );
+
+    renderCalendar();
+});
+
+calendarNext.addEventListener("click", function () {
+    calendarViewDate.setMonth(
+        calendarViewDate.getMonth() + 1
+    );
+
+    renderCalendar();
+});
+
+// Membuat pilihan 3 bulan terakhir secara otomatis
+function generateTransactionMonths() {
+    const today = new Date();
+
+    const customDateOption =
+        transactionMonth.querySelector('option[value="date"]');
+
+    transactionMonth.innerHTML = "";
+
+    for (let i = 0; i < 3; i++) {
+        const date = new Date(
+            today.getFullYear(),
+            today.getMonth() - i,
+            1
+        );
+
+        const value =
+            `${date.getFullYear()}-${String(
+                date.getMonth() + 1
+            ).padStart(2, "0")}`;
+
+        const label =
+            date.toLocaleDateString("id-ID", {
+                month: "long",
+                year: "numeric"
+            });
+
+        const option =
+            document.createElement("option");
+
+        option.value = value;
+        option.textContent = label;
+
+        transactionMonth.appendChild(option);
+    }
+
+    transactionMonth.appendChild(customDateOption);
+}
+
+generateTransactionMonths();
+function filterTransactions() {
+    const keyword =
+        transactionSearch.value.toLowerCase().trim();
+
+    const selectedType =
+        transactionType.value;
+
+    const selectedMonth =
+        transactionMonth.value;
+
+    const transactions =
+        document.querySelectorAll(".all-transaction-item");
+
+    transactions.forEach(item => {
+        const text =
+            item.textContent.toLowerCase();
+
+        const typeElement =
+            item.querySelector(".transaction-type");
+
+        const matchesSearch =
+            text.includes(keyword);
+
+        const matchesType =
+            selectedType === "all" ||
+            typeElement.classList.contains(selectedType);
+        const itemDate =
+            item.dataset.date;
+
+        let matchesDate = true;
+
+        if (selectedMonth === "date") {
+
+            if (rangeStart && rangeEnd) {
+                const startDate =
+                    `${rangeStart.getFullYear()}-${String(
+                        rangeStart.getMonth() + 1
+                    ).padStart(2, "0")}-${String(
+                        rangeStart.getDate()
+                    ).padStart(2, "0")}`;
+
+                const endDate =
+                    `${rangeEnd.getFullYear()}-${String(
+                        rangeEnd.getMonth() + 1
+                    ).padStart(2, "0")}-${String(
+                        rangeEnd.getDate()
+                    ).padStart(2, "0")}`;
+
+                matchesDate =
+                    itemDate >= startDate &&
+                    itemDate <= endDate;
+            }
+
+        } else {
+            matchesDate =
+                itemDate.startsWith(selectedMonth);
+        }         
+
+        if (matchesSearch && matchesType && matchesDate) {
+            item.style.display = "";
+        } else {
+            item.style.display = "none";
+        }
+    });
+}
+
+transactionSearch.addEventListener(
+    "input",
+    filterTransactions
+);
+
+transactionType.addEventListener(
+    "change",
+    filterTransactions
+);
+// Filter berdasarkan bulan / custom tanggal
+transactionMonth.addEventListener("change", function () {
+    if (transactionMonth.value === "date") {
+        transactionMonth.hidden = true;
+        dateRangeWrapper.hidden = false;
+
+        rangeStart = null;
+        rangeEnd = null;
+
+        dateRangeLabel.textContent =
+            "Pilih rentang tanggal";
+
+        calendarViewDate = new Date();
+
+        renderCalendar();
+        filterTransactions();
+
+
+        dateRangePopover.hidden = false;
+    } else {
+        dateRangeWrapper.hidden = true;
+        dateRangePopover.hidden = true;
+
+        rangeStart = null;
+        rangeEnd = null;
+
+        filterTransactions();
+    }
+});
+// Buka / tutup kalender
+dateRangeButton.addEventListener("click", function (e) {
+    e.stopPropagation();
+
+    dateRangePopover.hidden =
+        !dateRangePopover.hidden;
+});
+// ==============================
+// PROFILE DROPDOWN - OVERVIEW
+// ==============================
+
+const profileButton =
+    document.getElementById("profileButton");
+
+const profileDropdown =
+    document.getElementById("profileDropdown");
+
+profileButton.addEventListener("click", function (e) {
+    e.stopPropagation();
+
+    profileDropdown.classList.toggle("active");
+});
+
+document.addEventListener("click", function () {
+    profileDropdown.classList.remove("active");
+});
+
+
+// ==============================
+// PROFILE DROPDOWN - TRANSAKSI
+// ==============================
+
+const transactionProfileButton =
+    document.getElementById("transactionProfileButton");
+
+const transactionProfileDropdown =
+    document.getElementById("transactionProfileDropdown");
+
+transactionProfileButton.addEventListener("click", function (e) {
+    e.stopPropagation();
+
+    transactionProfileDropdown.classList.toggle("active");
+});
+
+document.addEventListener("click", function () {
+    transactionProfileDropdown.classList.remove("active");
+});
+
+</script>
+</body>
+</html>
