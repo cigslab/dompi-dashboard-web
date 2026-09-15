@@ -36,24 +36,24 @@
         </aside>
 
         <main class="main-content">
-        <div id="overviewPage">    
+        <div id="overviewPage">
 
             <header class="topbar">
                 <div>
                     <p class="welcome">Halo,</p>
-                    <h1>Cigs</h1>
+                    <h1 data-display-name>User</h1>
                     <p class="subtitle">
-                        Ini ringkasan keuangan kamu hari ini.
+                        Ini ringkasan keuangan kamu bulan ini.
                     </p>
                 </div>
 
                 <div class="profile">
 
                     <button class="profile-button" id="profileButton">
-                        <div class="avatar">C</div>
+                        <div class="avatar" data-profile-avatar>U</div>
 
                         <div class="profile-info">
-                            <strong>Cigs</strong>
+                            <strong data-display-name>User</strong>
                             <span>Pro</span>
                         </div>
 
@@ -200,10 +200,10 @@
                     <div class="profile">
 
                         <button class="profile-button" id="transactionProfileButton">
-                            <div class="avatar">C</div>
+                            <div class="avatar" data-profile-avatar>U</div>
 
                             <div class="profile-info">
-                                <strong>Cigs</strong>
+                                <strong data-display-name>User</strong>
                                 <span>Pro</span>
                             </div>
 
@@ -218,7 +218,7 @@
 
                     </div>
                 </header>
-                </p>                
+                </p>
                 <div class="transaction-toolbar">
 
                     <div class="transaction-search">
@@ -306,7 +306,7 @@
                                 disabled
                             >
                                 Terapkan
-                            </button>                            
+                            </button>
 
                         </div>
 
@@ -341,7 +341,7 @@
                         </p>
                     </div>
 
-                </section>                
+                </section>
             </div>
             <div id="analyticsPage" class="page-hidden">
 
@@ -354,7 +354,9 @@
                     </div>
 
                     <select id="analyticsPeriod">
-                        <option value="6">6 bulan terakhir</option>
+                        <option value="3">3 bulan terakhir</option>
+                        <option value="6" selected>6 bulan terakhir</option>
+                        <option value="12">12 bulan terakhir</option>
                     </select>
                 </header>
 
@@ -393,6 +395,27 @@
                     </div>
 
                 </section>
+                <section class="analytics-comparison-card">
+
+                    <div class="analytics-card-header">
+                        <div>
+                            <h2>Perbandingan Bulanan</h2>
+                            <p>
+                                Lihat perubahan keuangan dari bulan ke bulan.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div
+                        id="monthlyComparisonList"
+                        class="monthly-comparison-list"
+                    >
+                        <div class="monthly-comparison-placeholder">
+                            Data perbandingan sedang disiapkan.
+                        </div>
+                    </div>
+
+                </section>
                 <section class="analytics-category-card">
 
                     <div class="analytics-card-header">
@@ -423,17 +446,124 @@
         </main>
 
     </div>
+    <div id="editTransactionModal" class="transaction-edit-modal hidden">
+        <div class="transaction-edit-modal-card">
+
+            <h3>Edit Transaksi</h3>
+
+            <label>
+                Kategori
+                <input id="editTransactionCategory" type="text">
+            </label>
+
+            <label>
+                Nominal
+                <input id="editTransactionAmount" type="number">
+            </label>
+
+            <label>
+                Catatan
+                <input id="editTransactionNote" type="text">
+            </label>
+
+            <label>
+                Jenis
+                <select id="editTransactionType">
+                    <option value="expense">Pengeluaran</option>
+                    <option value="income">Pemasukan</option>
+                </select>
+            </label>
+
+            <div class="transaction-edit-modal-actions">
+                <button
+                    id="cancelEditTransaction"
+                    type="button"
+                >
+                    Batal
+                </button>
+
+                <button
+                    id="saveEditTransaction"
+                    type="button"
+                >
+                    Simpan
+                </button>
+            </div>
+
+        </div>
+    </div>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script>
+const telegramApp = window.Telegram?.WebApp;
+telegramApp?.ready();
+let dashboardAuthFailed = false;
+
+function showDashboardAuthError(message) {
+    dashboardAuthFailed = true;
+    let banner = document.getElementById("dashboardAuthError");
+    if (!banner) {
+        banner = document.createElement("div");
+        banner.id = "dashboardAuthError";
+        banner.setAttribute("role", "alert");
+        banner.style.cssText = "position:fixed;top:0;left:0;right:0;z-index:10000;padding:16px;background:#522;color:white;text-align:center";
+        document.body.appendChild(banner);
+    }
+    banner.textContent = message;
+}
+
+async function apiFetch(url, options = {}) {
+    const initData = telegramApp?.initData;
+    if (!initData || dashboardAuthFailed) {
+        const message = "Buka ulang dashboard melalui tombol di bot Dompi.";
+        showDashboardAuthError(message);
+        throw new Error(message);
+    }
+    const headers = new Headers(options.headers);
+    headers.set("Authorization", `tma ${initData}`);
+    const response = await fetch(url, { ...options, headers });
+    if (response.status === 401) {
+        const message = "Sesi berakhir. Buka ulang dashboard dari bot Dompi.";
+        showDashboardAuthError(message);
+        throw new Error(message);
+    }
+    return response;
+}
+
+if (!telegramApp?.initData) {
+    showDashboardAuthError("Buka dashboard melalui tombol di bot Dompi.");
+}
+</script>
+<script>
+async function loadProfile() {
+    try {
+        const response = await apiFetch("/api/profile");
+        if (!response.ok) return;
+        const data = await response.json();
+        const name = typeof data.display_name === "string" && data.display_name.trim()
+            ? data.display_name : "User";
+        document.querySelectorAll("[data-display-name]").forEach(element => {
+            element.textContent = name;
+        });
+        document.querySelectorAll("[data-profile-avatar]").forEach(element => {
+            element.textContent = Array.from(name)[0].toUpperCase();
+        });
+    } catch (error) {
+        // Keep the neutral placeholder; apiFetch handles authentication errors.
+    }
+}
+loadProfile();
+</script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <script>
 const ctx = document.getElementById("cashflowChart");
 
 const CASHFLOW_API_URL =
-    "https://dompi-dashboard-production.up.railway.app/api/cashflow/8532474600";
+    "/api/cashflow";
 
 async function loadCashflowChart() {
     try {
-        const response = await fetch(CASHFLOW_API_URL);
+        const response = await apiFetch(CASHFLOW_API_URL);
 
         if (!response.ok) {
             throw new Error("Gagal mengambil data cashflow");
@@ -525,7 +655,7 @@ loadCashflowChart();
 </script>
 <script>
 const API_URL =
-    "https://dompi-dashboard-production.up.railway.app/api/summary/8532474600";
+    "/api/summary";
 
 function formatRupiah(value) {
     return new Intl.NumberFormat("id-ID", {
@@ -537,7 +667,7 @@ function formatRupiah(value) {
 
 async function loadSummary() {
     try {
-        const response = await fetch(API_URL);
+        const response = await apiFetch(API_URL);
 
         if (!response.ok) {
             throw new Error("Gagal mengambil data dashboard");
@@ -567,7 +697,7 @@ loadSummary();
 </script>
 <script>
 const CATEGORY_API_URL =
-    "https://dompi-dashboard-production.up.railway.app/api/categories/8532474600";
+    "/api/categories";
 
 let expenseDonutChartInstance = null;
 
@@ -585,7 +715,7 @@ async function loadCategories() {
         document.getElementById("expenseDonutChart");
 
     try {
-        const response = await fetch(CATEGORY_API_URL);
+        const response = await apiFetch(CATEGORY_API_URL);
 
         if (!response.ok) {
             throw new Error("Gagal mengambil kategori");
@@ -637,7 +767,7 @@ async function loadCategories() {
                     category: "Lainnya",
                     total: otherTotal
                 });
-            }        
+            }
 
         // =========================
         // TOTAL PENGELUARAN
@@ -681,17 +811,20 @@ async function loadCategories() {
 
                 categoryItem.innerHTML = `
                     <div>
-                        <strong>${item.category}</strong>
-                        <span>${formatRupiah(total)}</span>
+                        <strong></strong>
+                        <span></span>
                     </div>
 
                     <div class="progress">
                         <div
                             class="progress-fill"
-                            style="width: ${percentage}%;">
+                            >
                         </div>
                     </div>
                 `;
+            categoryItem.querySelector("strong").textContent = item.category;
+            categoryItem.querySelector("span").textContent = formatRupiah(total);
+            categoryItem.querySelector(".progress-fill").style.width = `${percentage}%`;
 
                 categoryList.appendChild(
                     categoryItem
@@ -746,18 +879,20 @@ async function loadCategories() {
                 legendItem.innerHTML = `
                     <span
                         class="donut-legend-color"
-                        style="background:
-                        ${colors[index % colors.length]}">
+                        >
                     </span>
 
                     <span class="donut-legend-name">
-                        ${item.category}
+
                     </span>
 
                     <span class="donut-legend-value">
-                        ${percentage.toFixed(1)}%
+
                     </span>
                 `;
+            legendItem.querySelector(".donut-legend-name").textContent = item.category;
+            legendItem.querySelector(".donut-legend-value").textContent = `${percentage.toFixed(1)}%`;
+            legendItem.querySelector(".donut-legend-color").style.background = colors[index % colors.length];
 
                 donutLegend.appendChild(
                     legendItem
@@ -877,7 +1012,7 @@ loadCategories();
 </script>
 <script>
 const TRANSACTIONS_API_URL =
-    "https://dompi-dashboard-production.up.railway.app/api/transactions/8532474600";
+    "/api/transactions";
 
 async function loadTransactions() {
     const transactionList =
@@ -887,7 +1022,7 @@ async function loadTransactions() {
         document.getElementById("allTransactionList");
 
     try {
-        const response = await fetch(TRANSACTIONS_API_URL);
+        const response = await apiFetch(TRANSACTIONS_API_URL);
 
         if (!response.ok) {
             throw new Error("Gagal mengambil transaksi");
@@ -896,20 +1031,27 @@ async function loadTransactions() {
         const analyticsCategoryMonth =
             document.getElementById("analyticsCategoryMonth");
 
-        const availableMonths = [
-            ...new Set(
-                data.map(item => {
-                    const date = new Date(item.date);
+        const availableMonths = [];
 
-                    return `${date.getFullYear()}-${String(
-                        date.getMonth() + 1
-                    ).padStart(2, "0")}`;
-                })
-            )
-        ].sort((a, b) => b.localeCompare(a));
+        const currentDate = new Date();
 
-        analyticsCategoryMonth.innerHTML =
-            availableMonths.map(monthKey => {
+        for (let i = 0; i < 12; i++) {
+            const date = new Date(
+                currentDate.getFullYear(),
+                currentDate.getMonth() - i,
+                1
+            );
+
+            const key =
+                `${date.getFullYear()}-${String(
+                    date.getMonth() + 1
+                ).padStart(2, "0")}`;
+
+            availableMonths.push(key);
+        }
+
+        analyticsCategoryMonth.replaceChildren(
+            ...availableMonths.map(monthKey => {
                 const [year, month] = monthKey.split("-");
 
                 const date = new Date(
@@ -924,12 +1066,243 @@ async function loadTransactions() {
                         year: "numeric"
                     });
 
-                return `
-                    <option value="${monthKey}">
-                        ${label}
-                    </option>
-                `;
-            }).join("");
+                const option = document.createElement("option");
+                option.value = monthKey;
+                option.textContent = label;
+                return option;
+            })
+        );
+
+                const MONTHLY_ANALYTICS_API_URL =
+                    "/api/analytics/monthly";
+
+
+                function shiftMonth(monthKey, offset) {
+                    const [year, month] = monthKey.split("-").map(Number);
+
+                    const date = new Date(
+                        year,
+                        month - 1 + offset,
+                        1
+                    );
+
+                    return `${date.getFullYear()}-${String(
+                        date.getMonth() + 1
+                    ).padStart(2, "0")}`;
+                }
+
+
+                function shortMonthLabel(monthKey) {
+                    const [year, month] = monthKey.split("-");
+
+                    return new Date(
+                        Number(year),
+                        Number(month) - 1,
+                        1
+                    ).toLocaleDateString("id-ID", {
+                        month: "short",
+                        year: "numeric"
+                    });
+                }
+
+
+                function getMonthlyRecord(data, monthKey) {
+                    return data.find(
+                        item => item.month === monthKey
+                    ) || {
+                        month: monthKey,
+                        income: 0,
+                        expense: 0,
+                        transaction_count: 0
+                    };
+                }
+
+
+                function getChange(current, previous) {
+                    if (previous === 0) {
+                        return "—";
+                    }
+
+                    const percentage =
+                        ((current - previous) / previous) * 100;
+
+                    if (percentage > 0) {
+                        return `↑ ${Math.abs(percentage).toFixed(1)}%`;
+                    }
+
+                    if (percentage < 0) {
+                        return `↓ ${Math.abs(percentage).toFixed(1)}%`;
+                    }
+
+                    return "0%";
+                }
+
+
+                async function renderMonthlyComparisons() {
+                    const container =
+                        document.getElementById("monthlyComparisonList");
+
+                    try {
+                        const response =
+                            await apiFetch(MONTHLY_ANALYTICS_API_URL);
+
+                        const monthlyData =
+                            await response.json();
+
+                        if (!monthlyData.length) {
+                            container.innerHTML = `
+                                <div class="monthly-comparison-placeholder">
+                                    Belum ada data bulanan.
+                                </div>
+                            `;
+                            return;
+                        }
+
+                        const latestMonth =
+                            monthlyData[0].month;
+
+                        const comparisons = [0, 1, 2].map(offset => {
+                            const currentKey =
+                                shiftMonth(latestMonth, -offset);
+
+                            const previousKey =
+                                shiftMonth(latestMonth, -(offset + 1));
+
+                            return {
+                                current:
+                                    getMonthlyRecord(
+                                        monthlyData,
+                                        currentKey
+                                    ),
+
+                                previous:
+                                    getMonthlyRecord(
+                                        monthlyData,
+                                        previousKey
+                                    )
+                            };
+                        });
+
+                        container.replaceChildren(
+                            ...comparisons.map(({ current, previous }) => {
+
+                                const currentNet =
+                                    current.income - current.expense;
+
+                                const previousNet =
+                                    previous.income - previous.expense;
+
+                                const template = document.createElement("template");
+                                template.innerHTML = `
+                                    <div class="monthly-comparison-row">
+
+                                        <div class="monthly-comparison-title">
+
+                                            <span>vs</span>
+
+                                        </div>
+                                        <div class="monthly-comparison-metrics">
+                                            <div class="monthly-comparison-metric">
+                                                <div class="monthly-comparison-icon income">
+                                                    ↑
+                                                </div>
+
+                                                <div class="monthly-comparison-content">
+                                                    <span>Pemasukan</span>
+                                                    <strong>
+
+                                                    </strong>
+                                                    <small>
+
+                                                    </small>
+                                                </div>
+                                            </div>
+
+                                            <div class="monthly-comparison-metric">
+                                                <div class="monthly-comparison-icon expense">
+                                                    ↓
+                                                </div>
+
+                                                <div class="monthly-comparison-content">
+                                                    <span>Pengeluaran</span>
+                                                    <strong>
+
+                                                    </strong>
+                                                    <small>
+
+                                                    </small>
+                                                </div>
+                                            </div>
+
+                                            <div class="monthly-comparison-metric">
+                                                <div class="monthly-comparison-icon net">
+                                                    ↕
+                                                </div>
+
+                                                <div class="monthly-comparison-content">
+                                                    <span>Net Cashflow</span>
+                                                    <strong>
+
+                                                    </strong>
+                                                    <small>
+
+                                                    </small>
+                                                </div>
+                                            </div>
+
+                                            <div class="monthly-comparison-metric">
+                                                <div class="monthly-comparison-icon transactions">
+                                                    #
+                                                </div>
+
+                                                <div class="monthly-comparison-content">
+                                                    <span>Transaksi</span>
+                                                    <strong>
+
+                                                    </strong>
+                                                    <small>
+
+                                                    </small>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                `;
+                                const row = template.content.firstElementChild;
+                                const title = row.querySelector(".monthly-comparison-title");
+                                title.prepend(document.createTextNode(shortMonthLabel(current.month) + " "));
+                                title.append(document.createTextNode(" " + shortMonthLabel(previous.month)));
+                                const values = [
+                                    [formatRupiah(current.income), getChange(current.income, previous.income)],
+                                    [formatRupiah(current.expense), getChange(current.expense, previous.expense)],
+                                    [formatRupiah(currentNet), getChange(currentNet, previousNet)],
+                                    [current.transaction_count, getChange(current.transaction_count, previous.transaction_count)],
+                                ];
+                                row.querySelectorAll(".monthly-comparison-content").forEach((metric, index) => {
+                                    metric.querySelector("strong").textContent = values[index][0];
+                                    metric.querySelector("small").textContent = values[index][1];
+                                });
+                                return row;
+                            })
+                        );
+
+                    } catch (error) {
+                        console.error(
+                            "Monthly comparison error:",
+                            error
+                        );
+
+                        container.innerHTML = `
+                            <div class="monthly-comparison-placeholder">
+                                Data perbandingan gagal dimuat.
+                            </div>
+                        `;
+                    }
+                }
+
+
+                renderMonthlyComparisons();
+
         function renderAnalyticsCategories(selectedMonth) {
             const analyticsCategoryList =
                 document.querySelector(".analytics-category-list");
@@ -979,49 +1352,58 @@ if (categoryEntries.length === 0) {
     return;
 }
 
-analyticsCategoryList.innerHTML =
-    categoryEntries.map(([category, amount]) => {
+analyticsCategoryList.replaceChildren(
+    ...categoryEntries.map(([category, amount]) => {
         const percentage =
             totalExpense > 0
                 ? (amount / totalExpense) * 100
                 : 0;
 
-        return `
+        const template = document.createElement("template");
+        template.innerHTML = `
             <div class="analytics-category-item">
 
                 <div class="analytics-category-info">
                     <span class="analytics-category-name">
-                        ${category}
+
                     </span>
 
                     <span class="analytics-category-amount">
-                        ${formatRupiah(amount)}
+
                     </span>
                 </div>
 
                 <div class="analytics-category-bar-track">
                     <div
                         class="analytics-category-bar"
-                        style="width: ${percentage}%"
+
                     ></div>
                 </div>
 
                 <span class="analytics-category-percentage">
-                    ${percentage.toFixed(1)}%
+
                 </span>
 
             </div>
         `;
-    }).join("");
+        const row = template.content.firstElementChild;
+        row.querySelector(".analytics-category-name").textContent = category;
+        row.querySelector(".analytics-category-amount").textContent = formatRupiah(amount);
+        row.querySelector(".analytics-category-percentage").textContent = `${percentage.toFixed(1)}%`;
+        row.querySelector(".analytics-category-bar").style.width = `${percentage}%`;
+        return row;
+    })
+);
         }
+
         renderAnalyticsCategories(
             analyticsCategoryMonth.value
-        );      
+        );
         analyticsCategoryMonth.addEventListener("change", () => {
             renderAnalyticsCategories(
                 analyticsCategoryMonth.value
             );
-        });                      
+        });
         const monthlyCashflow = {};
 
         data.forEach(item => {
@@ -1045,12 +1427,18 @@ analyticsCategoryList.innerHTML =
                 monthlyCashflow[key].expense += Number(item.amount);
             }
         });
-  
-        const lastSixMonths = [];
+
+        const analyticsPeriod =
+            document.getElementById("analyticsPeriod");
+
+        const selectedPeriod =
+            Number(analyticsPeriod.value);
+
+        const selectedMonths = [];
 
         const today = new Date();
 
-        for (let i = 5; i >= 0; i--) {
+        for (let i = selectedPeriod - 1; i >= 0; i--) {
             const date = new Date(
                 today.getFullYear(),
                 today.getMonth() - i,
@@ -1068,7 +1456,7 @@ analyticsCategoryList.innerHTML =
                     year: "numeric"
                 });
 
-            lastSixMonths.push({
+            selectedMonths.push({
                 key: key,
                 label: label,
                 income: monthlyCashflow[key]?.income || 0,
@@ -1079,8 +1467,8 @@ analyticsCategoryList.innerHTML =
             document.getElementById("cashflowChartArea");
 
         const maxCashflowValue = Math.max(
-            ...lastSixMonths.map(month => month.income),
-            ...lastSixMonths.map(month => month.expense),
+            ...selectedMonths.map(month => month.income),
+            ...selectedMonths.map(month => month.expense),
             1
         );
 
@@ -1088,14 +1476,17 @@ analyticsCategoryList.innerHTML =
             <div class="cashflow-chart-wrapper">
 
                 <div class="cashflow-y-axis">
-                    <span>${formatRupiah(maxCashflowValue)}</span>
-                    <span>${formatRupiah(maxCashflowValue * 0.75)}</span>
-                    <span>${formatRupiah(maxCashflowValue * 0.5)}</span>
-                    <span>${formatRupiah(maxCashflowValue * 0.25)}</span>
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                    <span></span>
                     <span>Rp0</span>
                 </div>
 
-                <div class="cashflow-chart">
+                <div
+                    class="cashflow-chart"
+
+                >
 
                     <div class="cashflow-grid-lines">
                         <span></span>
@@ -1105,46 +1496,54 @@ analyticsCategoryList.innerHTML =
                         <span></span>
                     </div>
 
-                    ${lastSixMonths.map(month => {
-                        const incomeHeight =
-                            (month.income / maxCashflowValue) * 100;
 
-                        const expenseHeight =
-                            (month.expense / maxCashflowValue) * 100;
 
-                        return `
+                </div>
+
+            </div>
+        `;
+        cashflowChartArea.querySelectorAll(".cashflow-y-axis span").forEach((label, index) => {
+            if (index < 4) label.textContent = formatRupiah(maxCashflowValue * [1, 0.75, 0.5, 0.25][index]);
+        });
+        const cashflowBars = cashflowChartArea.querySelector(".cashflow-chart");
+        cashflowBars.style.gridTemplateColumns = `repeat(${selectedMonths.length}, minmax(0, 1fr))`;
+        selectedMonths.forEach(month => {
+            const incomeHeight = (month.income / maxCashflowValue) * 100;
+            const expenseHeight = (month.expense / maxCashflowValue) * 100;
+            const template = document.createElement("template");
+            template.innerHTML = `
                             <div class="cashflow-month">
 
                                 <div class="cashflow-bars">
 
                                     <div
                                         class="cashflow-bar income-bar"
-                                        style="height: ${incomeHeight}%"
-                                        title="Pemasukan: ${formatRupiah(month.income)}"
                                     ></div>
 
                                     <div
                                         class="cashflow-bar expense-bar"
-                                        style="height: ${expenseHeight}%"
-                                        title="Pengeluaran: ${formatRupiah(month.expense)}"
                                     ></div>
 
                                 </div>
 
                                 <span class="cashflow-month-label">
-                                    ${month.label}
+
                                 </span>
 
                             </div>
                         `;
-                    }).join("")}
-
-                </div>
-
-            </div>
-        `;                   
+            const row = template.content.firstElementChild;
+            const incomeBar = row.querySelector(".income-bar");
+            const expenseBar = row.querySelector(".expense-bar");
+            incomeBar.style.height = `${incomeHeight}%`;
+            expenseBar.style.height = `${expenseHeight}%`;
+            incomeBar.title = "Pemasukan: " + formatRupiah(month.income);
+            expenseBar.title = "Pengeluaran: " + formatRupiah(month.expense);
+            row.querySelector(".cashflow-month-label").textContent = month.label;
+            cashflowBars.appendChild(row);
+        });
         if (data.length === 0) {
-            
+
             transactionList.innerHTML =
                 "<p>Belum ada transaksi.</p>";
 
@@ -1180,21 +1579,28 @@ analyticsCategoryList.innerHTML =
 
             transactionItem.innerHTML = `
                 <div class="transaction-date">
-                    ${formattedDate}
+
                 </div>
 
                 <div class="transaction-category">
-                    ${item.category}
+
                 </div>
 
                 <div class="transaction-note">
-                    ${item.note || "-"}
+
                 </div>
 
-                <div class="transaction-amount ${item.type}">
-                    ${sign}${formatRupiah(item.amount)}
+                <div class="transaction-amount">
+
                 </div>
             `;
+            transactionItem.querySelector(".transaction-date").textContent = formattedDate;
+            transactionItem.querySelector(".transaction-category").textContent = item.category;
+            transactionItem.querySelector(".transaction-note").textContent = item.note || "-";
+            transactionItem.querySelector(".transaction-amount").textContent = sign + formatRupiah(item.amount);
+            transactionItem.querySelectorAll(".transaction-amount, .transaction-type").forEach(element => {
+                element.classList.add(item.type === "income" ? "income" : "expense");
+            });
 
             transactionList.appendChild(transactionItem);
             });
@@ -1210,7 +1616,7 @@ analyticsCategoryList.innerHTML =
                     });
 
                 const sign =
-                    item.type === "income" ? "+" : "-";            
+                    item.type === "income" ? "+" : "-";
 
             // HALAMAN TRANSAKSI
             const fullTransactionItem =
@@ -1227,29 +1633,68 @@ analyticsCategoryList.innerHTML =
 
             fullTransactionItem.innerHTML = `
                 <div class="transaction-date">
-                    ${formattedDate}
+
                 </div>
 
                 <div class="transaction-category">
-                    ${item.category}
+
                 </div>
 
                 <div class="transaction-note">
-                    ${item.note || "-"}
+
                 </div>
 
-                <div class="transaction-type ${item.type}">
-                    ${typeLabel}
+                <div class="transaction-type">
+
                 </div>
 
-                <div class="transaction-amount ${item.type}">
-                    ${sign}${formatRupiah(item.amount)}
+                <div class="transaction-amount">
+
                 </div>
 
-                <div class="transaction-action">
-                    ⋯
+                <div class="transaction-action-menu">
+
+                    <button
+                        class="transaction-action-button"
+                        type="button"
+
+                    >
+                        ⋯
+                    </button>
+
+                    <div class="transaction-action-dropdown">
+
+                        <button
+                            class="transaction-edit-button"
+                            type="button"
+
+                        >
+                            Edit
+                        </button>
+
+                        <button
+                            class="transaction-delete-button"
+                            type="button"
+
+                        >
+                            Hapus
+                        </button>
+
+                    </div>
+
                 </div>
             `;
+            fullTransactionItem.querySelector(".transaction-date").textContent = formattedDate;
+            fullTransactionItem.querySelector(".transaction-category").textContent = item.category;
+            fullTransactionItem.querySelector(".transaction-note").textContent = item.note || "-";
+            fullTransactionItem.querySelector(".transaction-type").textContent = typeLabel;
+            fullTransactionItem.querySelector(".transaction-amount").textContent = sign + formatRupiah(item.amount);
+            fullTransactionItem.querySelectorAll(".transaction-amount, .transaction-type").forEach(element => {
+                element.classList.add(item.type === "income" ? "income" : "expense");
+            });
+            fullTransactionItem.querySelectorAll("button").forEach(button => {
+                button.dataset.transactionId = String(item.transaction_id);
+            });
 
             allTransactionList.appendChild(fullTransactionItem);
         });
@@ -1266,6 +1711,243 @@ analyticsCategoryList.innerHTML =
 }
 
 loadTransactions();
+
+document.addEventListener("click", (event) => {
+    const actionButton =
+        event.target.closest(".transaction-action-button");
+
+    if (actionButton) {
+        event.stopPropagation();
+
+        document
+            .querySelectorAll(".transaction-action-menu.open")
+            .forEach(menu => {
+                if (!menu.contains(actionButton)) {
+                    menu.classList.remove("open");
+                }
+            });
+
+        actionButton
+            .closest(".transaction-action-menu")
+            .classList.toggle("open");
+
+        return;
+    }
+
+    document
+        .querySelectorAll(".transaction-action-menu.open")
+        .forEach(menu => {
+            menu.classList.remove("open");
+        });
+});
+document.addEventListener("click", async (event) => {
+    const deleteButton =
+        event.target.closest(".transaction-delete-button");
+
+    if (!deleteButton) {
+        return;
+    }
+
+    const transactionId =
+        deleteButton.dataset.transactionId;
+
+    const confirmed =
+        confirm("Hapus transaksi ini?");
+
+    if (!confirmed) {
+        return;
+    }
+
+    try {
+        const response = await apiFetch(
+            `/api/transactions/${transactionId}`,
+            {
+                method: "DELETE"
+            }
+        );
+
+        const result = await response.json();
+
+        if (!response.ok) {
+            alert(
+                result.message ||
+                "Gagal menghapus transaksi."
+            );
+            return;
+        }
+
+        await loadSummary();
+        await loadCategories();
+        await loadTransactions();
+
+    } catch (error) {
+        console.error(
+            "Delete transaction error:",
+            error
+        );
+
+        alert("Gagal menghapus transaksi.");
+    }
+});
+let editingTransactionId = null;
+
+document.addEventListener("click", (event) => {
+    const editButton =
+        event.target.closest(".transaction-edit-button");
+
+    if (!editButton) {
+        return;
+    }
+
+    const transactionId =
+        editButton.dataset.transactionId;
+
+    const transactionItem =
+        editButton.closest(".all-transaction-item");
+
+    if (!transactionItem) {
+        return;
+    }
+
+    editingTransactionId = transactionId;
+
+    const category =
+        transactionItem.querySelector(".transaction-category")
+            ?.textContent.trim() || "";
+
+    const note =
+        transactionItem.querySelector(".transaction-note")
+            ?.textContent.trim() || "";
+
+    const amountText =
+        transactionItem.querySelector(".transaction-amount")
+            ?.textContent || "";
+
+    const amount =
+        Number(
+            amountText
+                .replace(/[^\d]/g, "")
+        );
+
+    const typeElement =
+        transactionItem.querySelector(".transaction-type");
+
+    const transactionType =
+        typeElement?.classList.contains("income")
+            ? "income"
+            : "expense";
+
+    document.getElementById(
+        "editTransactionCategory"
+    ).value = category;
+
+    document.getElementById(
+        "editTransactionAmount"
+    ).value = amount;
+
+    document.getElementById(
+        "editTransactionNote"
+    ).value =
+        note === "-" ? "" : note;
+
+    document.getElementById(
+        "editTransactionType"
+    ).value = transactionType;
+
+    document.getElementById(
+        "editTransactionModal"
+    ).classList.remove("hidden");
+});
+document
+    .getElementById("cancelEditTransaction")
+    .addEventListener("click", () => {
+        document
+            .getElementById("editTransactionModal")
+            .classList.add("hidden");
+
+        editingTransactionId = null;
+    });
+document
+    .getElementById("saveEditTransaction")
+    .addEventListener("click", async () => {
+        if (!editingTransactionId) {
+            return;
+        }
+
+        const category =
+            document.getElementById(
+                "editTransactionCategory"
+            ).value.trim();
+
+        const amount =
+            Number(
+                document.getElementById(
+                    "editTransactionAmount"
+                ).value
+            );
+
+        const note =
+            document.getElementById(
+                "editTransactionNote"
+            ).value.trim();
+
+        const type =
+            document.getElementById(
+                "editTransactionType"
+            ).value;
+
+        try {
+            const response = await apiFetch(
+                `/api/transactions/${editingTransactionId}`,
+                {
+                    method: "PATCH",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        category: category,
+                        amount: amount,
+                        note: note,
+                        type: type
+                    })
+                }
+            );
+
+            const result = await response.json();
+
+            if (!response.ok) {
+                alert(
+                    result.message ||
+                    "Gagal memperbarui transaksi."
+                );
+                return;
+            }
+
+            document
+                .getElementById("editTransactionModal")
+                .classList.add("hidden");
+
+            editingTransactionId = null;
+
+            await loadSummary();
+            await loadCategories();
+            await loadTransactions();
+
+        } catch (error) {
+            console.error(
+                "Update transaction error:",
+                error
+            );
+
+            alert("Gagal memperbarui transaksi.");
+        }
+    });
+const analyticsPeriod =
+    document.getElementById("analyticsPeriod");
+
+analyticsPeriod.addEventListener("change", () => {
+    loadTransactions();
+});
 
 const overviewMenu = document.getElementById("overviewMenu");
 const transactionMenu = document.getElementById("transactionMenu");
@@ -1339,7 +2021,7 @@ const closeTransactionDate =
     document.getElementById("closeTransactionDate");
 const resetTransactionFilter =
     document.getElementById("resetTransactionFilter");
-    
+
 resetTransactionFilter.addEventListener("click", function () {
     transactionSearch.value = "";
     transactionType.value = "all";
@@ -1359,7 +2041,7 @@ resetTransactionFilter.addEventListener("click", function () {
     applyDateRange.disabled = true;
 
     filterTransactions();
-});    
+});
 
 // ==============================
 // DATE RANGE PICKER
@@ -1648,7 +2330,7 @@ function filterTransactions() {
         } else {
             matchesDate =
                 itemDate.startsWith(selectedMonth);
-        }         
+        }
 
         if (matchesSearch && matchesType && matchesDate) {
             item.style.display = "";
