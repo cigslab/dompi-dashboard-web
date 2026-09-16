@@ -5,6 +5,8 @@ import hmac
 import json
 import re
 import time
+from datetime import date, timedelta
+from decimal import Decimal
 from urllib.parse import parse_qsl
 
 import psycopg2
@@ -35,6 +37,19 @@ CORS(
     supports_credentials=False,
     always_send=False,
 )
+
+
+def integer_amount(value):
+    """Normalize database IDR values without truncating fractional amounts."""
+    if type(value) not in (int, float, Decimal):
+        raise ValueError("Invalid integer IDR amount")
+    try:
+        amount = int(value)
+    except (ValueError, OverflowError):
+        raise ValueError("Invalid integer IDR amount") from None
+    if value != amount:
+        raise ValueError("Fractional IDR amount")
+    return amount
 
 
 class InvalidTelegramAuth(ValueError):
@@ -202,12 +217,12 @@ def summary():
 
     row = cursor.fetchone()
 
-    income = row[0]
-    expense = row[1]
-    balance = income - expense
-
     cursor.close()
     conn.close()
+
+    income = integer_amount(row[0])
+    expense = integer_amount(row[1])
+    balance = income - expense
 
     return jsonify({
         "income": income,
@@ -265,8 +280,8 @@ def cashflow():
         for row in rows:
             data.append({
                 "date": row[0],
-                "income": row[1],
-                "expense": row[2]
+                "income": integer_amount(row[1]),
+                "expense": integer_amount(row[2])
             })
 
         return jsonify(data)
@@ -335,8 +350,8 @@ def analytics_monthly():
         for row in rows:
             data.append({
                 "month": row[0],
-                "income": int(row[1]),
-                "expense": int(row[2]),
+                "income": integer_amount(row[1]),
+                "expense": integer_amount(row[2]),
                 "transaction_count": row[3]
             })
 
@@ -390,7 +405,7 @@ def categories():
         for row in rows:
             data.append({
                 "category": row[0],
-                "total": row[1]
+                "total": integer_amount(row[1])
             })
 
         return jsonify(data)
@@ -430,7 +445,8 @@ def category_breakdown():
             """,
             (g.user_id, month + '-%' if month else '%'),
         )
-        rows = cursor.fetchall()
+        rows = [(category, count, integer_amount(total))
+                for category, count, total in cursor.fetchall()]
         total = sum(row[2] for row in rows)
         items = [{"category": row[0], "transaction_count": row[1], "total": row[2],
                   "percentage": round(float(row[2] / total * 100), 2) if total else 0}
@@ -441,6 +457,88 @@ def category_breakdown():
     except Exception:
         app.logger.exception("Category breakdown failed")
         return jsonify(error="Gagal mengambil kategori"), 500
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
+
+
+@app.route("/api/reports")
+def reports():
+    period = request.args.get("period", "current")
+    try:
+        today = date.today()
+        if period == "current":
+            start, end = today.replace(day=1), today
+        elif period == "last":
+            end = today.replace(day=1) - timedelta(days=1)
+            start = end.replace(day=1)
+        elif period == "custom":
+            values = [request.args.get(key, "") for key in ("start", "end")]
+            if not all(re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", value) for value in values):
+                raise ValueError()
+            start, end = map(date.fromisoformat, values)
+        else:
+            raise ValueError()
+        if end < start:
+            raise ValueError()
+        days = (end - start).days + 1
+        previous_end = start - timedelta(days=1)
+        previous_start = start - timedelta(days=days)
+    except (ValueError, OverflowError):
+        return jsonify(error="Periode atau rentang tanggal tidak valid"), 400
+
+    conn = cursor = None
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            WITH selected AS (
+                SELECT type, COALESCE(analytics_category, 'Lainnya') AS category,
+                       amount,
+                       CASE WHEN LEFT(date, 10) >= %s THEN 'current' ELSE 'previous' END AS period
+                FROM expenses
+                WHERE user_id = %s AND currency = 'IDR'
+                  AND type IN ('income', 'expense')
+                  AND LEFT(date, 10) BETWEEN %s AND %s
+            )
+            SELECT period, type, category, COALESCE(SUM(amount), 0), COUNT(*)
+            FROM selected GROUP BY period, type, category
+            """,
+            (start.isoformat(), g.user_id, previous_start.isoformat(), end.isoformat()),
+        )
+        income = expense = transaction_count = previous_expense = 0
+        categories = []
+        for bucket, kind, category, total, count in cursor.fetchall():
+            total = integer_amount(total)
+            if bucket == "previous":
+                if kind == "expense":
+                    previous_expense += total
+                continue
+            transaction_count += count
+            if kind == "income":
+                income += total
+            else:
+                expense += total
+                categories.append({"category": category, "total": total})
+        categories.sort(key=lambda item: (-item["total"], item["category"]))
+        for item in categories:
+            item["percentage"] = round(float(item["total"] / expense * 100), 2) if expense else 0
+        change = round(float((expense - previous_expense) / previous_expense * 100), 2) if previous_expense > 0 else None
+        return jsonify(
+            start=start.isoformat(), end=end.isoformat(), days=days,
+            income=income, expense=expense, balance=income-expense,
+            average_daily_expense=(expense // days if expense % days == 0
+                                   else round(float(expense / days), 2)),
+            transaction_count=transaction_count, categories=categories,
+            comparison={"start": previous_start.isoformat(), "end": previous_end.isoformat(),
+                        "expense": previous_expense, "change_percentage": change},
+        )
+    except Exception:
+        app.logger.exception("Report query failed")
+        return jsonify(error="Gagal mengambil laporan"), 500
     finally:
         if cursor:
             cursor.close()
@@ -489,7 +587,7 @@ def transactions():
                 "transaction_id": row[0],
                 "category": row[1],
                 "analytics_category": row[2],
-                "amount": row[3],
+                "amount": integer_amount(row[3]),
                 "note": row[4],
                 "date": row[5],
                 "type": row[6],

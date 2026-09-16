@@ -2031,3 +2031,31 @@ body {
 .categories-amount { grid-column:3; grid-row:1; text-align:right; color:#67e58a; overflow-wrap:anywhere; }
 .categories-percent { grid-column:3; text-align:right; }
 @media(max-width:900px) { .categories-layout { grid-template-columns:minmax(0,1fr); } }
+
+/* Reports page: scoped styles leave existing pages unchanged. */
+.reports-filters, #reportsCustom:not([hidden]) { display:flex; flex-wrap:wrap; gap:12px; align-items:end; }
+.reports-filters label { display:flex; flex-direction:column; gap:8px; color:#aab2ae; font-size:13px; }
+.reports-filters input, .reports-filters select, .reports-filters button, #reportsRetry { color-scheme:dark; font:inherit; background:#151b19; color:#e8eeeb; border:1px solid #29322f; border-radius:10px; padding:12px 16px; min-height:44px; max-width:100%; }
+.reports-filters button, #reportsRetry { cursor:pointer; }
+#reportsStatus { margin:20px 0; color:#aab2ae; }
+.reports-summary h2 { overflow-wrap:anywhere; }
+#reportsIncome { color:#67e58a; }
+#reportsExpense { color:#ff6b6b; }
+.reports-period-summary, .reports-insight, .reports-breakdown { margin-top:20px; }
+.reports-period-summary dl { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:24px; margin:24px 0 16px; }
+.reports-period-summary dt, .reports-muted { color:#9aa39f; font-size:13px; line-height:1.6; }
+.reports-period-summary dd { margin-top:10px; font-size:20px; font-weight:600; overflow-wrap:anywhere; }
+.reports-insight { border-left:3px solid #67e58a; }
+.reports-insight p { margin-top:14px; line-height:1.6; }
+.reports-category-row { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr) 70px; gap:16px; align-items:center; padding:20px 0; border-bottom:1px solid #26302c; }
+.reports-category-row strong { overflow-wrap:anywhere; }
+.reports-category-row span, .reports-category-amount { text-align:right; }
+.reports-category-row span { color:#9aa39f; font-size:13px; }
+#reportsCategories { margin-top:12px; }
+@media(max-width:600px) {
+    .reports-period-summary dl { grid-template-columns:minmax(0,1fr); gap:20px; }
+    .reports-filters > label, #reportsCustom, #reportsCustom label { width:100%; min-width:0; }
+    .reports-filters input { width:100%; }
+    .reports-category-row { grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:8px; }
+    .reports-category-row span { grid-column:2; }
+}

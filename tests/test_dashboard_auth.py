@@ -3,6 +3,7 @@
 Uses Flask's real test client and a disposable in-memory SQL adapter, not
 production PostgreSQL or database.py (which performs migrations on import).
 """
+from decimal import Decimal
 import ast
 import asyncio
 import hashlib
@@ -18,7 +19,7 @@ import types
 import unittest
 import rupiah
 import psycopg2
-from unittest.mock import patch, AsyncMock
+from unittest.mock import patch, AsyncMock, MagicMock
 from urllib.parse import urlencode, parse_qsl
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -46,7 +47,7 @@ def signed(user_id=101, age=0, token=TOKEN, **extra):
 
 READS = ['/api/summary', '/api/cashflow', '/api/analytics/monthly',
          '/api/categories', '/api/transactions']
-ENDPOINTS = [('GET', p) for p in READS] + [('GET', '/api/profile'), ('GET', '/api/categories/breakdown')] + [
+ENDPOINTS = [('GET', p) for p in READS] + [('GET', '/api/reports'), ('GET', '/api/profile'), ('GET', '/api/categories/breakdown')] + [
     ('PATCH', '/api/transactions/1'), ('DELETE', '/api/transactions/1')]
 PAYLOAD = {'category': 'updated', 'amount': 15, 'note': 'test', 'type': 'expense'}
 
@@ -125,7 +126,7 @@ class DashboardAuthTests(unittest.TestCase):
         self.addCleanup(self.db.close)
         self.db.execute('CREATE TABLE users (telegram_id BIGINT PRIMARY KEY, first_name TEXT, username TEXT)')
         self.db.executemany('INSERT INTO users VALUES (?,?,?)', [(101, 'Nama A', 'user_a'), (202, 'Nama B', 'user_b')])
-        self.db.execute('CREATE TABLE expenses (user_id INTEGER, transaction_id INTEGER, category TEXT, analytics_category TEXT, amount INTEGER, note TEXT, date TEXT, type TEXT, currency TEXT)')
+        self.db.execute('CREATE TABLE expenses (user_id INTEGER, transaction_id INTEGER, category TEXT, analytics_category TEXT, amount BIGINT, note TEXT, date TEXT, type TEXT, currency TEXT)')
         self.db.executemany('INSERT INTO expenses VALUES (?,?,?,?,?,?,?,?,?)', [
             (101, 1, 'A expense', 'Food', 10, 'A', '2026-09-14', 'expense', 'IDR'),
             (101, 2, 'A income', 'Salary', 100, 'A', '2026-09-14', 'income', 'IDR'),
@@ -145,6 +146,47 @@ class DashboardAuthTests(unittest.TestCase):
         if method == 'PATCH' and 'json' not in kwargs:
             kwargs['json'] = PAYLOAD
         return self.client.open(path, method=method, headers=headers, **kwargs)
+
+    def test_integer_amount_contract(self):
+        for value in (0, -10, 10.0, Decimal('10.000'), Decimal('92233720368547758070')):
+            with self.subTest(value=value):
+                self.assertIs(type(api.integer_amount(value)), int)
+                self.assertEqual(api.integer_amount(value), value)
+        for value in (True, None, '10', 1.5, Decimal('1.0000000000000000001'),
+                      float('inf'), float('nan'), Decimal('NaN'), Decimal('Infinity')):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                api.integer_amount(value)
+
+    def test_nominal_json_types_and_fraction_rejection(self):
+        cases = [
+            ('/api/summary', lambda n: [(n, 0)], lambda d: [d['income'], d['expense'], d['balance']]),
+            ('/api/cashflow', lambda n: [('2026-09-14', n, 0)], lambda d: [d[0]['income'], d[0]['expense']]),
+            ('/api/analytics/monthly', lambda n: [('2026-09', n, 0, 1)], lambda d: [d[0]['income'], d[0]['expense']]),
+            ('/api/categories', lambda n: [('Food', n)], lambda d: [d[0]['total']]),
+            ('/api/categories/breakdown', lambda n: [('Food', 1, n)], lambda d: [d['total_expense'], d['categories'][0]['total']]),
+            ('/api/transactions', lambda n: [(1, 'Food', 'Food', n, '', '2026-09-14', 'expense', 'IDR')], lambda d: [d[0]['amount']]),
+            ('/api/reports?period=custom&start=2026-09-14&end=2026-09-14',
+             lambda n: [('current', 'expense', 'Food', n, 1), ('previous', 'expense', 'Food', n, 1)],
+             lambda d: [d['income'], d['expense'], d['balance'], d['average_daily_expense'], d['categories'][0]['total'], d['comparison']['expense']]),
+        ]
+        for route, rows, amounts in cases:
+            for value in (Decimal('10.00'), 10.0, Decimal('10.5')):
+                with self.subTest(route=route, value=value):
+                    conn = MagicMock()
+                    conn.cursor.return_value.fetchall.return_value = rows(value)
+                    conn.cursor.return_value.fetchone.return_value = rows(value)[0]
+                    with patch.object(api, 'get_connection', return_value=conn), patch.dict(api.app.config, TESTING=False):
+                        response = self.request('GET', route, signed())
+                    if value == Decimal('10.5'):
+                        self.assertEqual(response.status_code, 500)
+                    else:
+                        self.assertEqual(response.status_code, 200)
+                        for amount in amounts(response.json):
+                            self.assertIs(type(amount), int)
+                        if 'categories' in response.json:
+                            self.assertIs(type(response.json['categories'][0]['percentage']), float)
+                    conn.cursor.return_value.close.assert_called_once()
+                    conn.close.assert_called_once()
 
     def test_category_breakdown_period_ownership_percentages(self):
         self.db.executemany('INSERT INTO expenses VALUES (?,?,?,?,?,?,?,?,?)', [
@@ -171,6 +213,80 @@ class DashboardAuthTests(unittest.TestCase):
         self.get_connection.reset_mock()
         for month in ['2026-13', 'bad', '2026-1']:
             self.assertEqual(self.request('GET', '/api/categories/breakdown?month='+month, signed()).status_code, 400)
+        self.get_connection.assert_not_called()
+
+    def report(self, query='', user=101):
+        from datetime import date
+        class FixedDate(date):
+            @classmethod
+            def today(cls): return cls(2026, 9, 16)
+        with patch.object(api, 'date', FixedDate):
+            return self.request('GET', '/api/reports' + query, signed(user))
+
+    def test_reports_current_ownership_idr_totals_and_categories(self):
+        self.db.executemany('INSERT INTO expenses VALUES (?,?,?,?,?,?,?,?,?)', [
+            (101, 3, 'Bus', 'Transportasi', 30, '', '2026-09-16 23:59:59', 'expense', 'IDR'),
+            (101, 4, 'Foreign', 'Food', 9000, '', '2026-09-14', 'expense', 'USD'),
+            (101, 5, 'Future', 'Food', 700, '', '2026-09-17', 'expense', 'IDR'),
+            (101, 6, 'Other', 'Food', 600, '', '2026-09-14', 'transfer', 'IDR'),
+        ])
+        self.db.commit()
+        response = self.report('?user_id=202')
+        self.assertEqual(response.status_code, 200)
+        data = response.json
+        self.assertEqual((data['start'], data['end'], data['days']), ('2026-09-01', '2026-09-16', 16))
+        self.assertEqual((data['income'], data['expense'], data['balance']), (100, 40, 60))
+        self.assertEqual((data['transaction_count'], data['average_daily_expense']), (3, 2.5))
+        self.assertEqual(data['categories'], [
+            {'category': 'Transportasi', 'total': 30, 'percentage': 75.0},
+            {'category': 'Food', 'total': 10, 'percentage': 25.0}])
+        self.assertEqual(self.report(user=202).json['expense'], 1554)
+        self.assertIsNone(data['comparison']['change_percentage'])
+        self.assertEqual(response.headers['Cache-Control'], 'no-store')
+
+    def test_reports_last_month_and_comparison(self):
+        self.db.executemany('INSERT INTO expenses VALUES (?,?,?,?,?,?,?,?,?)', [
+            (101, 3, 'Old', 'Food', 60, '', '2026-08-01', 'expense', 'IDR'),
+            (101, 4, 'Old', 'Food', 40, '', '2026-08-31 23:59:59', 'expense', 'IDR'),
+            (101, 5, 'Previous', 'Food', 50, '', '2026-07-01', 'expense', 'IDR'),
+        ])
+        self.db.commit()
+        data = self.report('?period=last').json
+        self.assertEqual((data['start'], data['end'], data['days']), ('2026-08-01', '2026-08-31', 31))
+        self.assertEqual((data['expense'], data['balance'], data['transaction_count']), (100, -100, 2))
+        self.assertEqual(data['average_daily_expense'], 3.23)
+        self.assertEqual(data['comparison'], {'start': '2026-07-01', 'end': '2026-07-31', 'expense': 50, 'change_percentage': 100.0})
+
+    def test_reports_custom_inclusive_comparison_and_literal_category(self):
+        payload = '<img src=x onerror=alert(1)>'
+        self.db.executemany('INSERT INTO expenses VALUES (?,?,?,?,?,?,?,?,?)', [
+            (101, 3, 'Previous', 'Food', 20, '', '2026-09-13', 'expense', 'IDR'),
+            (101, 4, 'Extra', payload, 10, '', '2026-09-14 23:59:59', 'expense', 'IDR'),
+        ])
+        self.db.commit()
+        data = self.report('?period=custom&start=2026-09-14&end=2026-09-14').json
+        self.assertEqual((data['expense'], data['income'], data['transaction_count'], data['days']), (20, 100, 3, 1))
+        self.assertEqual(data['average_daily_expense'], 20)
+        self.assertEqual(data['comparison']['change_percentage'], 0)
+        self.assertEqual(data['categories'][0]['category'], payload)
+        self.assertEqual(sum(c['percentage'] for c in data['categories']), 100)
+        lower = self.report('?period=custom&start=2026-09-15&end=2026-09-15').json
+        self.assertEqual(lower['comparison']['change_percentage'], -100)
+
+    def test_reports_empty_and_invalid_ranges(self):
+        data = self.report('?period=custom&start=2000-02-01&end=2000-02-29').json
+        self.assertEqual(data['days'], 29)
+        for key in ('income', 'expense', 'balance', 'average_daily_expense', 'transaction_count'):
+            self.assertEqual(data[key], 0)
+        self.assertEqual(data['categories'], [])
+        self.assertIsNone(data['comparison']['change_percentage'])
+        self.get_connection.reset_mock()
+        for query in ('?period=bad', '?period=custom',
+                      '?period=custom&start=2026-02-30&end=2026-03-01',
+                      '?period=custom&start=2026-09-15&end=2026-09-14',
+                      '?period=custom&start=2026-9-01&end=2026-09-14',
+                      '?period=custom&start=0001-01-01&end=2026-09-14'):
+            self.assertEqual(self.report(query).status_code, 400)
         self.get_connection.assert_not_called()
 
     def test_profile_user_a_uses_database_name(self):

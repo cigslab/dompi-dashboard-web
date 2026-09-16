@@ -31,11 +31,17 @@ function setup(attack) {
   window.__reportFetch=window.fetch.bind(window);
   window.fetch=async (url,options={})=>{
     const pathname=new URL(url,location.href).pathname;
-    window.__testCalls.push({path:pathname,method:options.method||'GET',body:options.body,auth:new Headers(options.headers).get('Authorization')});
+    window.__testCalls.push({path:pathname,query:new URL(url,location.href).search,method:options.method||'GET',body:options.body,auth:new Headers(options.headers).get('Authorization')});
     let data;
     if(pathname==='/api/profile') data={display_name:attack?payloads[0]:'Nama A'};
     else if(options.method&&options.method!=='GET') data={success:true};
     else if(pathname==='/api/categories/breakdown') data=new URL(url,location.href).searchParams.get('month')==='2000-01'?{total_expense:0,category_count:0,largest_category:null,categories:[]}:{total_expense:10000,category_count:4,largest_category:texts[3],categories:texts.map((category,i)=>({category,total:(i+1)*1000,transaction_count:i+1,percentage:(i+1)*10})).reverse()};
+    else if(pathname==='/api/reports') {
+      await new Promise(resolve=>setTimeout(resolve,100));
+      if(window.__reportsError) return new Response('{}',{status:500});
+      const empty=new URL(url,location.href).searchParams.get('start')==='2000-01-01';
+      data={start:'2026-09-01',end:'2026-09-16',days:16,income:empty?0:12000000,expense:empty?0:4000000,balance:empty?0:8000000,average_daily_expense:empty?0:250000,transaction_count:empty?0:24,categories:empty?[]:texts.map((category,i)=>({category,total:(i+1)*400000,percentage:(i+1)*10})).reverse(),comparison:{start:'2026-08-16',end:'2026-08-31',expense:5000000,change_percentage:empty?-100:-20}};
+    }
     else if(pathname==='/api/summary') data={income:2000,expense:8000,balance:-6000};
     else if(pathname==='/api/cashflow') data=[{date,income:2000,expense:8000}];
     else if(pathname==='/api/categories') data=texts.map((category,i)=>({category,total:1000*(i+1)}));
@@ -121,6 +127,43 @@ async function runTests(index,attack){
     send('#categoriesAllTime','click');
     for(let i=0;i<50&&document.querySelector('#categoriesContent').hidden;i++) await wait();
     eq(document.querySelector('#categoriesCount').textContent,'4','all time reload');
+    send('#reportsMenu','click');
+    eq(document.querySelector('#reportsStatus').textContent,'Memuat laporan…','report loading');
+    const reportReady=async()=>{for(let i=0;i<50&&document.querySelector('#reportsContent').hidden;i++)await wait();};
+    await reportReady();
+    eq(document.querySelector('#reportsPage').closest('main')!==null,true,'report inside main');
+    eq(document.querySelector('#reportsPage').getBoundingClientRect().width>0,true,'report visible');
+    eq(text('.reports-category-row strong:not(.reports-category-amount)'),[...window.__testTexts].reverse(),'report category literal');
+    eq(text('.reports-category-row span'),['40%','30%','20%','10%'],'report percentages');
+    eq(document.querySelector('#reportsIncome').textContent.includes('12.000.000'),true,'report income');
+    eq(document.querySelector('#reportsExpense').textContent.includes('4.000.000'),true,'report expense');
+    eq(document.querySelector('#reportsBalance').textContent.includes('8.000.000'),true,'report balance');
+    eq(document.querySelector('#reportsAverage').textContent.includes('250.000'),true,'report average');
+    eq(document.querySelector('#reportsCount').textContent,'24','report count');
+    eq(document.querySelector('#reportsInsight').textContent.includes('turun 20%'),true,'report insight');
+    eq(document.documentElement.scrollWidth<=innerWidth,true,'report no overflow');
+    document.querySelector('#reportsPeriod').value='last';send('#reportsPeriod','change');await reportReady();
+    eq(window.__testCalls.at(-1).query,'?period=last','last month query');
+    document.querySelector('#reportsPeriod').value='custom';send('#reportsPeriod','change');await reportReady();
+    eq(document.querySelector('#reportsCustom').hidden,false,'custom controls visible');
+    eq(document.documentElement.scrollWidth<=innerWidth,true,'custom controls no overflow');
+    document.querySelector('#reportsStart').value='2000-01-01';document.querySelector('#reportsEnd').value='2000-01-31';send('#reportsFilters','submit');await reportReady();
+    eq(window.__testCalls.at(-1).query,'?period=custom&start=2000-01-01&end=2000-01-31','custom query');
+    eq(document.querySelector('#reportsStatus').textContent,'Belum ada transaksi pada periode ini.','report empty');
+    window.__reportsError=true;send('#reportsFilters','submit');
+    for(let i=0;i<50&&document.querySelector('#reportsRetry').hidden;i++)await wait();
+    eq(document.querySelector('#reportsStatus').textContent,'Gagal memuat laporan. Silakan coba lagi.','report error');
+    eq(document.querySelector('#reportsContent').hidden,true,'stale content hidden on error');
+    window.__reportsError=false;send('#reportsRetry','click');await reportReady();
+    eq(document.querySelector('#reportsRetry').hidden,true,'report retry succeeds');
+    send('#overviewMenu','click');
+    eq(document.querySelector('#reportsPage').classList.contains('page-hidden'),true,'leave reports');
+    eq(document.querySelector('#overviewPage').getBoundingClientRect().width>0,true,'overview unchanged');
+    document.querySelector('#reportsPeriod').value='current';send('#reportsPeriod','change');send('#reportsMenu','click');await reportReady();
+    eq(window.__dompiXss,0,'report no XSS execution');
+    eq(document.querySelectorAll('#reportsPage img,#reportsPage svg[onload]').length,0,'report no injected markup');
+    eq(window.__testCalls.every(c=>c.auth==='tma test-init-data'),true,'reports authenticated');
+    eq(window.__testErrors,[],'reports no page errors');
     const result={pass:true,index,attack,checks,width:innerWidth};
     await window.__reportFetch('/results',{method:'POST',body:JSON.stringify(result)});
     const report=document.createElement('pre');report.id='xssTestResults';report.style.whiteSpace='pre-wrap';report.style.overflowWrap='anywhere';report.textContent=JSON.stringify(result);document.body.prepend(report);
@@ -136,7 +179,7 @@ http.createServer((req,res)=>{
   if(req.method==='POST'){let body='';req.on('data',b=>body+=b);req.on('end',()=>{const result=JSON.parse(body);results[`${result.index}-${result.attack}`]=result;console.log(JSON.stringify(result));res.end('ok');});return;}
   res.setHeader('Content-Type','application/json');res.end(JSON.stringify(results));return;
  }
- if(url.pathname==='/static/categories.js'){res.setHeader('Content-Type','application/javascript');res.end(fs.readFileSync(path.join(roots[0],'static/categories.js')));return;}
+ if(['/static/categories.js','/static/reports.js'].includes(url.pathname)){res.setHeader('Content-Type','application/javascript');res.end(fs.readFileSync(path.join(roots[0],url.pathname.slice(1))));return;}
  if(url.pathname.endsWith('style.css')){const i=Number(url.searchParams.get('index')||0);res.setHeader('Content-Type','text/css');res.end(fs.readFileSync(path.join(roots[i],'static/style.css')));return;}
  if(!/^\/0$/.test(url.pathname)){res.statusCode=404;res.end();return;}
  const index=Number(url.pathname.slice(1)),attack=url.searchParams.get('normal')!=='1';

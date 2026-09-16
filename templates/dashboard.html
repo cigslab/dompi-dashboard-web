@@ -26,7 +26,7 @@
                 <a href="#" class="menu-item" id="transactionMenu">Transaksi</a>
                 <a href="#" class="menu-item" id="analyticsMenu">Analitik</a>
                 <a href="#" class="menu-item" id="categoriesMenu">Kategori</a>
-                <a href="#" class="menu-item">Laporan</a>
+                <a href="#" class="menu-item" id="reportsMenu">Laporan</a>
             </nav>
 
             <div class="sidebar-bottom">
@@ -36,6 +36,34 @@
         </aside>
 
         <main class="main-content">
+            <section id="reportsPage" class="page-hidden">
+                <header class="page-header"><div><h1>Laporan</h1><p class="subtitle">Ringkasan keuangan dalam satu tampilan.</p></div></header>
+                <form id="reportsFilters" class="reports-filters">
+                    <label>Periode<select id="reportsPeriod"><option value="current">Bulan ini</option><option value="last">Bulan lalu</option><option value="custom">Rentang tanggal</option></select></label>
+                    <div id="reportsCustom" hidden>
+                        <label>Dari<input type="date" id="reportsStart"></label>
+                        <label>Sampai<input type="date" id="reportsEnd"></label>
+                        <button type="submit">Tampilkan</button>
+                    </div>
+                </form>
+                <p id="reportsStatus" role="status" aria-live="polite"></p>
+                <button type="button" id="reportsRetry" hidden>Coba lagi</button>
+                <div id="reportsContent" hidden>
+                    <div class="summary-grid reports-summary">
+                        <div class="summary-card"><div class="summary-info"><p>Pemasukan</p><h2 id="reportsIncome">Rp0</h2></div></div>
+                        <div class="summary-card"><div class="summary-info"><p>Pengeluaran</p><h2 id="reportsExpense">Rp0</h2></div></div>
+                        <div class="summary-card"><div class="summary-info"><p>Saldo Bersih</p><h2 id="reportsBalance">Rp0</h2></div></div>
+                    </div>
+                    <section class="panel reports-period-summary">
+                        <h3>Rangkuman periode</h3>
+                        <dl><div><dt>Periode aktif</dt><dd id="reportsActivePeriod"></dd></div><div><dt>Rata-rata pengeluaran harian</dt><dd id="reportsAverage"></dd></div><div><dt>Jumlah transaksi</dt><dd id="reportsCount"></dd></div></dl>
+                        <p id="reportsAverageNote" class="reports-muted"></p>
+                    </section>
+                    <section class="panel reports-insight"><h3>Sekilas periode ini</h3><p id="reportsInsight"></p><p id="reportsComparisonPeriod" class="reports-muted"></p></section>
+                    <section class="panel reports-breakdown"><h3>Kategori pengeluaran</h3><div id="reportsCategories"></div></section>
+                </div>
+            </section>
+
             <section id="categoriesPage" class="page-hidden">
                 <header class="page-header">
                     <div><h1>Kategori</h1><p class="subtitle">Lihat ke mana uangmu paling banyak pergi.</p></div>
@@ -2452,5 +2480,6 @@ document.addEventListener("click", function () {
 
 </script>
 <script src="/static/categories.js"></script>
+<script src="/static/reports.js"></script>
 </body>
 </html>
