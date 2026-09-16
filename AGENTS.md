@@ -48,14 +48,39 @@ Dashboard berfungsi sebagai Telegram Mini App untuk melihat dan mengelola data.
 ## Testing
 For frontend/refactor tasks, run relevant tests first.
 
-Before checkpoint:
-- SQLite regression
-- auth client tests
-- browser/XSS tests
-- git diff --check
+Development (non-interactive): `./scripts/test_fast.sh`
+Full automated regression (non-interactive): `./scripts/test_all.sh`
+Browser/security checkpoint gate: `./scripts/test_browser_manual.sh`
 
-PostgreSQL verification command:
-python3 tests/run_dashboard_postgres.py
+`test_fast.sh` runs SQLite/backend regression, auth client, and
+`git diff --check`. `test_all.sh` runs those checks followed by the existing
+disposable PostgreSQL runner (Homebrew PostgreSQL 18 on macOS). Neither command
+starts a browser server or waits for manual viewport verification.
+
+A full checkpoint requires BOTH `test_all.sh` and `test_browser_manual.sh`
+to pass on the same application revision. A successful test_all alone does
+not establish browser/XSS coverage. Do not skip the browser gate for frontend
+or security changes.
+
+Run from the repository root. Install requirements.txt dependencies and Node.js
+first. Override runtimes when needed with `PYTHON_BIN` and `NODE_BIN`.
+
+`test_browser_manual.sh` preserves the existing browser harness and all eight
+scenarios: open http://127.0.0.1:8765/0 (XSS) and
+http://127.0.0.1:8765/0?normal=1 (normal) at widths 390, 430, 768, and 1440,
+reloading each URL at each viewport. It fails on any failed result or timeout,
+requires all eight passing results, and stops its fixture server on exit.
+Default timeout: 300 seconds; override with `BROWSER_TEST_TIMEOUT`.
+Port 8765 must be available. Telegram/API/Chart.js remain mocked; this is not
+a live Telegram integration test.
+
+Headless launch could not be validated in the current sandbox (installed
+Chrome aborted at launch). Browser automation is therefore not a claimed
+capability of these helpers; no unverified headless dependency is required.
+
+SQLite checks explicitly unset DOMPI_DASHBOARD_TEST_DSN. PostgreSQL uses only
+the existing disposable-cluster runner; do not point tests at production.
+Manual PostgreSQL verification: `python3 tests/run_dashboard_postgres.py`
 
 ## Working style
 For substantial changes:
