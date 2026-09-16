@@ -25,7 +25,7 @@
                 <a href="#" class="menu-item active" id="overviewMenu">Overview</a>
                 <a href="#" class="menu-item" id="transactionMenu">Transaksi</a>
                 <a href="#" class="menu-item" id="analyticsMenu">Analitik</a>
-                <a href="#" class="menu-item">Kategori</a>
+                <a href="#" class="menu-item" id="categoriesMenu">Kategori</a>
                 <a href="#" class="menu-item">Laporan</a>
             </nav>
 
@@ -36,6 +36,30 @@
         </aside>
 
         <main class="main-content">
+            <section id="categoriesPage" class="page-hidden">
+                <header class="page-header">
+                    <div><h1>Kategori</h1><p class="subtitle">Lihat ke mana uangmu paling banyak pergi.</p></div>
+                </header>
+                <div class="categories-period">
+                    <label for="categoriesMonth">Periode <input type="month" id="categoriesMonth"></label>
+                    <button type="button" id="categoriesAllTime">Semua waktu</button>
+                </div>
+                <p id="categoriesStatus" role="status" aria-live="polite"></p>
+                <div id="categoriesContent" hidden>
+                    <div class="summary-grid categories-summary">
+                        <div class="summary-card"><div class="summary-info"><p>Total Pengeluaran</p><h2 id="categoriesTotal">Rp0</h2></div></div>
+                        <div class="summary-card"><div class="summary-info"><p>Jumlah Kategori</p><h2 id="categoriesCount">0</h2></div></div>
+                        <div class="summary-card"><div class="summary-info"><p>Kategori Terbesar</p><h2 id="categoriesLargest">—</h2></div></div>
+                    </div>
+                    <div class="categories-layout">
+                        <section class="panel"><div class="panel-header"><h3>Distribusi pengeluaran</h3></div>
+                            <div id="categoriesDonut" role="img" aria-label="Distribusi pengeluaran"><div><span>Pengeluaran</span><strong id="categoriesDonutTotal">Rp0</strong></div></div>
+                        </section>
+                        <section class="panel"><div class="panel-header"><h3>Pengeluaran per kategori</h3></div><div id="categoriesList"></div></section>
+                    </div>
+                </div>
+            </section>
+
         <div id="overviewPage">
 
             <header class="topbar">
@@ -2427,5 +2451,6 @@ document.addEventListener("click", function () {
 });
 
 </script>
+<script src="/static/categories.js"></script>
 </body>
 </html>

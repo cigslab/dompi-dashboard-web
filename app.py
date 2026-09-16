@@ -408,6 +408,46 @@ def categories():
 
         if conn:
             conn.close()
+@app.route("/api/categories/breakdown")
+def category_breakdown():
+    month = request.args.get("month", "")
+    if month and not re.fullmatch(r"[0-9]{4}-(?:0[1-9]|1[0-2])", month):
+        return jsonify(error="Periode harus YYYY-MM"), 400
+    conn = None
+    cursor = None
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT COALESCE(analytics_category, 'Lainnya') AS category,
+                   COUNT(*) AS transaction_count, SUM(amount) AS total
+            FROM expenses
+            WHERE user_id = %s AND currency = 'IDR' AND type = 'expense'
+              AND date LIKE %s
+            GROUP BY COALESCE(analytics_category, 'Lainnya')
+            ORDER BY total DESC, category ASC
+            """,
+            (g.user_id, month + '-%' if month else '%'),
+        )
+        rows = cursor.fetchall()
+        total = sum(row[2] for row in rows)
+        items = [{"category": row[0], "transaction_count": row[1], "total": row[2],
+                  "percentage": round(float(row[2] / total * 100), 2) if total else 0}
+                 for row in rows]
+        return jsonify(total_expense=total, category_count=len(items),
+                       largest_category=items[0]["category"] if items else None,
+                       categories=items)
+    except Exception:
+        app.logger.exception("Category breakdown failed")
+        return jsonify(error="Gagal mengambil kategori"), 500
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
+
+
 @app.route("/api/transactions")
 def transactions():
     user_id = g.user_id

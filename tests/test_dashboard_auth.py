@@ -46,7 +46,7 @@ def signed(user_id=101, age=0, token=TOKEN, **extra):
 
 READS = ['/api/summary', '/api/cashflow', '/api/analytics/monthly',
          '/api/categories', '/api/transactions']
-ENDPOINTS = [('GET', p) for p in READS] + [('GET', '/api/profile')] + [
+ENDPOINTS = [('GET', p) for p in READS] + [('GET', '/api/profile'), ('GET', '/api/categories/breakdown')] + [
     ('PATCH', '/api/transactions/1'), ('DELETE', '/api/transactions/1')]
 PAYLOAD = {'category': 'updated', 'amount': 15, 'note': 'test', 'type': 'expense'}
 
@@ -145,6 +145,33 @@ class DashboardAuthTests(unittest.TestCase):
         if method == 'PATCH' and 'json' not in kwargs:
             kwargs['json'] = PAYLOAD
         return self.client.open(path, method=method, headers=headers, **kwargs)
+
+    def test_category_breakdown_period_ownership_percentages(self):
+        self.db.executemany('INSERT INTO expenses VALUES (?,?,?,?,?,?,?,?,?)', [
+            (101, 3, 'Bus', 'Transportasi', 30, '', '2026-09-15', 'expense', 'IDR'),
+            (101, 4, 'Old', 'Food', 90, '', '2026-08-14', 'expense', 'IDR'),
+            (101, 5, 'Foreign', 'Food', 9999, '', '2026-09-14', 'expense', 'USD'),
+        ])
+        self.db.commit()
+        response = self.request('GET', '/api/categories/breakdown?month=2026-09&user_id=202', signed())
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json, {
+            'total_expense': 40, 'category_count': 2, 'largest_category': 'Transportasi',
+            'categories': [{'category': 'Transportasi', 'transaction_count': 1, 'total': 30, 'percentage': 75.0},
+                           {'category': 'Food', 'transaction_count': 1, 'total': 10, 'percentage': 25.0}]})
+        other = self.request('GET', '/api/categories/breakdown?month=2026-09', signed(202)).json
+        self.assertEqual(other['total_expense'], 1554)
+        self.assertEqual(other['largest_category'], 'Secret')
+        self.assertEqual(self.request('GET', '/api/categories/breakdown?month=2026-08', signed()).json['total_expense'], 90)
+        self.assertEqual(self.request('GET', '/api/categories/breakdown', signed()).json['total_expense'], 130)
+
+    def test_category_breakdown_empty_and_invalid_period(self):
+        self.assertEqual(self.request('GET', '/api/categories/breakdown?month=2000-01', signed()).json,
+                         {'categories': [], 'total_expense': 0, 'category_count': 0, 'largest_category': None})
+        self.get_connection.reset_mock()
+        for month in ['2026-13', 'bad', '2026-1']:
+            self.assertEqual(self.request('GET', '/api/categories/breakdown?month='+month, signed()).status_code, 400)
+        self.get_connection.assert_not_called()
 
     def test_profile_user_a_uses_database_name(self):
         response = self.request('GET', '/api/profile?user_id=202', signed(), json={'user_id': 202})

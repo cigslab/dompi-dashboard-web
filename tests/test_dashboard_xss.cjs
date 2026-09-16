@@ -35,6 +35,7 @@ function setup(attack) {
     let data;
     if(pathname==='/api/profile') data={display_name:attack?payloads[0]:'Nama A'};
     else if(options.method&&options.method!=='GET') data={success:true};
+    else if(pathname==='/api/categories/breakdown') data=new URL(url,location.href).searchParams.get('month')==='2000-01'?{total_expense:0,category_count:0,largest_category:null,categories:[]}:{total_expense:10000,category_count:4,largest_category:texts[3],categories:texts.map((category,i)=>({category,total:(i+1)*1000,transaction_count:i+1,percentage:(i+1)*10})).reverse()};
     else if(pathname==='/api/summary') data={income:2000,expense:8000,balance:-6000};
     else if(pathname==='/api/cashflow') data=[{date,income:2000,expense:8000}];
     else if(pathname==='/api/categories') data=texts.map((category,i)=>({category,total:1000*(i+1)}));
@@ -104,6 +105,22 @@ async function runTests(index,attack){
       }
       if(innerWidth<=900 && menu==='#transactionMenu') eq([...document.querySelectorAll('.transaction-action-button')].every(e=>e.getBoundingClientRect().width>=44 && e.getBoundingClientRect().height>=44),true,'touch targets');
     }
+    send('#categoriesMenu','click');
+    for(let i=0;i<50&&document.querySelector('#categoriesContent').hidden;i++) await wait();
+    eq(document.querySelector('#categoriesPage').closest('main')!==null,true,'category inside main');
+    eq(document.querySelector('#categoriesPage').getBoundingClientRect().width>0,true,'category visible');
+    eq(text('#categoriesList strong:not(.categories-amount)'),[...window.__testTexts].reverse(),'categories literal sorted');
+    eq(document.querySelector('#categoriesCount').textContent,'4','category count');
+    eq(text('.categories-percent'),['40%','30%','20%','10%'],'percentages');
+    eq(document.documentElement.scrollWidth<=innerWidth,true,'category page no overflow');
+    eq(window.__dompiXss,0,'category XSS');
+    document.querySelector('#categoriesMonth').value='2000-01';send('#categoriesMonth','change');
+    for(let i=0;i<50&&document.querySelector('#categoriesContent').hidden;i++) await wait();
+    eq(document.querySelector('#categoriesCount').textContent,'0','empty category count');
+    eq(document.querySelector('#categoriesStatus').textContent,'Belum ada pengeluaran pada periode ini.','empty state');
+    send('#categoriesAllTime','click');
+    for(let i=0;i<50&&document.querySelector('#categoriesContent').hidden;i++) await wait();
+    eq(document.querySelector('#categoriesCount').textContent,'4','all time reload');
     const result={pass:true,index,attack,checks,width:innerWidth};
     await window.__reportFetch('/results',{method:'POST',body:JSON.stringify(result)});
     const report=document.createElement('pre');report.id='xssTestResults';report.style.whiteSpace='pre-wrap';report.style.overflowWrap='anywhere';report.textContent=JSON.stringify(result);document.body.prepend(report);
@@ -119,6 +136,7 @@ http.createServer((req,res)=>{
   if(req.method==='POST'){let body='';req.on('data',b=>body+=b);req.on('end',()=>{const result=JSON.parse(body);results[`${result.index}-${result.attack}`]=result;console.log(JSON.stringify(result));res.end('ok');});return;}
   res.setHeader('Content-Type','application/json');res.end(JSON.stringify(results));return;
  }
+ if(url.pathname==='/static/categories.js'){res.setHeader('Content-Type','application/javascript');res.end(fs.readFileSync(path.join(roots[0],'static/categories.js')));return;}
  if(url.pathname.endsWith('style.css')){const i=Number(url.searchParams.get('index')||0);res.setHeader('Content-Type','text/css');res.end(fs.readFileSync(path.join(roots[i],'static/style.css')));return;}
  if(!/^\/0$/.test(url.pathname)){res.statusCode=404;res.end();return;}
  const index=Number(url.pathname.slice(1)),attack=url.searchParams.get('normal')!=='1';
