@@ -11,6 +11,13 @@ let checks = 0;
     const scripts = [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g)].map(m => m[1]).filter(s => s.trim());
     for (const source of scripts) new vm.Script(source, {filename: file});
     checks++;
+    for (const name of ['analytics.js', 'navigation.js']) {
+      const source = fs.readFileSync(path.resolve(__dirname, '../static', name), 'utf8');
+      new vm.Script(source, {filename: name});
+      assert(!/\bfetch\s*\(/.test(source), name + ' must use apiFetch');
+      assert(!/BOT_TOKEN|initDataUnsafe/.test(source), name + ' must not bypass verified auth');
+      checks++;
+    }
     assert(!html.includes('8532474600'));
     assert(!html.includes('BOT_TOKEN'));
     assert(!html.includes('initDataUnsafe'));
@@ -37,7 +44,7 @@ let checks = 0;
     }
     for (const method of ['GET', 'PATCH', 'DELETE']) {
       const {context, calls} = setup('signed-data');
-      context.options = {method, headers: {'Content-Type': 'application/json'}, body: method === 'PATCH' ? '{"amount":5}' : undefined};
+      context.options = {method, headers: {'Content-Type': 'application/json', Authorization: 'untrusted-override'}, body: method === 'PATCH' ? '{"amount":5}' : undefined};
       await vm.runInContext('apiFetch("https://api.example.test/api/transactions/1", options)', context);
       assert.equal(calls.length, 1);
       assert.equal(calls[0][1].headers.get('Authorization'), 'tma signed-data');
