@@ -34,7 +34,7 @@ function setup(attack) {
     window.__testCalls.push({path:pathname,query:new URL(url,location.href).search,method:options.method||'GET',body:options.body,auth:new Headers(options.headers).get('Authorization')});
     let data;
     if(pathname==='/api/profile') { if(window.__profileError) return new Response('{}',{status:500}); data={display_name:attack?payloads[0]:'Nama A',username:window.__noUsername?null:(attack?payloads[1]:'user_a')}; }
-    else if(pathname==='/api/account') { if(window.__accountError) return new Response('{}',{status:500}); data={plan:window.__unknownAccount?null:(window.__accountPlan||'free'),monthly_usage:window.__unknownAccount?null:(window.__accountUsage??37),usage_month:month,joined_at:null,free_monthly_limit:window.__accountLimit??null}; }
+    else if(pathname==='/api/account') { if(window.__accountError) return new Response('{}',{status:500}); data={plan:window.__unknownAccount?null:(window.__accountPlan||'free'),monthly_usage:window.__unknownAccount?null:(window.__accountUsage??37),usage_month:month,joined_at:window.__accountJoined??'2026-09-07',free_monthly_limit:window.__accountLimit??null}; }
     else if(options.method&&options.method!=='GET') data={success:true};
     else if(pathname==='/api/categories/breakdown') {
       if(window.__analyticsError) return new Response('{}',{status:500});
@@ -108,11 +108,25 @@ async function runTests(index,attack){
     eq(document.querySelector('#accountQuotaProgress').hidden,false,'Free progress visible');
     eq(document.querySelector('#accountQuotaProgress').value,37,'Free progress value');
     eq(document.querySelector('#accountQuotaProgress').max,50,'Free progress maximum');
+    eq(document.querySelector('#accountQuotaRemaining').hidden,true,'no warning with ample quota');
+    eq(document.querySelector('#accountJoined').textContent,'Bergabung 7 Sep 2026','human joined date');
+    eq(formatAccountJoined('2026-02-30'),'','invalid date hidden');
+    eq(formatAccountJoined('<img src=x onerror=alert(1)>'),'','unsafe date hidden');
+    eq(text('.account-action > span:first-child'),['Upgrade ke Pro','Bantuan & Feedback','Kebijakan Privasi','Syarat & Ketentuan','Hapus Data / Akun'],'compact account action list');
+    const callsBeforeActions=window.__testCalls.length;
+    document.querySelectorAll('.account-action').forEach(button=>button.click());
+    eq(window.__testCalls.length,callsBeforeActions,'placeholders never call API');
+    eq([...document.querySelectorAll('.account-action')].every(button=>button.disabled),true,'placeholder actions disabled');
+    window.__accountUsage=49;await loadAccountUsage();
+    eq(document.querySelector('#accountQuotaRemaining').textContent,'Tersisa 1 pencatatan bulan ini','near limit message');
+    eq(document.querySelector('#accountQuotaRemaining').hidden,false,'near limit visible');
+
     window.__accountUsage=70;await loadAccountUsage();
     eq(document.querySelector('#accountUsage').textContent,'70 / 50 pencatatan bulan ini','over limit count preserved');
     eq(document.querySelector('#accountQuotaProgress').value,50,'over limit progress capped');
     window.__accountPlan='pro';await loadAccountUsage();
     eq(document.querySelector('#accountQuotaProgress').hidden,true,'Pro hides Free progress');
+    eq(document.querySelector('#accountQuotaRemaining').hidden,true,'Pro hides quota warning');
     eq(document.querySelector('#accountUsage').textContent,'Unlimited — pencatatan tanpa batas','Pro unlimited status');
     window.__accountPlan='free';window.__accountLimit='50';await loadAccountUsage();
     eq(document.querySelector('#accountQuotaProgress').hidden,true,'invalid limit hides progress');

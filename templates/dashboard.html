@@ -47,9 +47,17 @@
                         <p id="accountJoined" class="account-caption" hidden></p>
                         <p id="accountUsage" role="status" aria-live="polite">Memuat…</p>
                         <progress id="accountQuotaProgress" aria-label="Pemakaian kuota bulanan Free" aria-describedby="accountUsage" hidden></progress>
+                        <p id="accountQuotaRemaining" class="account-caption" role="status" hidden></p>
                         <p id="accountQuotaNote" class="account-caption" hidden></p>
                         <button type="button" id="accountUsageRetry" class="account-retry" hidden>Coba lagi informasi akun</button>
                     </section>
+                    <ul class="account-actions" aria-label="Layanan akun — belum tersedia">
+                        <li><button type="button" disabled class="account-action account-action-upgrade"><span>Upgrade ke Pro</span><span class="account-action-hint">Segera</span></button></li>
+                        <li><button type="button" disabled class="account-action "><span>Bantuan &amp; Feedback</span><span class="account-action-hint">Segera</span></button></li>
+                        <li><button type="button" disabled class="account-action "><span>Kebijakan Privasi</span><span class="account-action-hint">Segera</span></button></li>
+                        <li><button type="button" disabled class="account-action "><span>Syarat &amp; Ketentuan</span><span class="account-action-hint">Segera</span></button></li>
+                        <li><button type="button" disabled class="account-action account-action-danger"><span>Hapus Data / Akun</span><span class="account-action-hint">Segera</span></button></li>
+                    </ul>
                 </div>
             </section>
         <div id="overviewPage">
@@ -583,6 +591,12 @@ if (!telegramApp?.initData) {
 }
 </script>
 <script>
+function formatAccountJoined(value) {
+    if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return "";
+    const date = new Date(value + "T00:00:00Z");
+    if (!Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== value) return "";
+    return "Bergabung " + new Intl.DateTimeFormat("id-ID", {day: "numeric", month: "short", year: "numeric", timeZone: "UTC"}).format(date);
+}
 let profileRequest = 0;
 let accountUsageRequest = 0;
 async function loadAccountUsage() {
@@ -592,6 +606,8 @@ async function loadAccountUsage() {
     output.textContent = "Memuat…";
     const progress = document.getElementById("accountQuotaProgress");
     const quotaNote = document.getElementById("accountQuotaNote");
+    const remainingNote = document.getElementById("accountQuotaRemaining");
+    remainingNote.hidden = true;
     progress.hidden = true;
     quotaNote.hidden = true;
     document.getElementById("accountPlan").hidden = true;
@@ -606,7 +622,7 @@ async function loadAccountUsage() {
         plan.textContent = data.plan === "free" ? "Paket Free" : data.plan === "pro" ? "Paket Pro" : "";
         plan.hidden = !plan.textContent;
         const joined = document.getElementById("accountJoined");
-        joined.textContent = typeof data.joined_at === "string" && /^\d{4}-\d{2}-\d{2}$/.test(data.joined_at) ? "Bergabung " + data.joined_at : "";
+        joined.textContent = formatAccountJoined(data.joined_at);
         joined.hidden = !joined.textContent;
         const validUsage = Number.isSafeInteger(data.monthly_usage) && data.monthly_usage >= 0;
         const validLimit = Number.isSafeInteger(data.free_monthly_limit) && data.free_monthly_limit > 0;
@@ -618,6 +634,11 @@ async function loadAccountUsage() {
             progress.max = data.free_monthly_limit;
             progress.value = Math.min(data.monthly_usage, data.free_monthly_limit);
             progress.hidden = false;
+            const remaining = Math.max(0, data.free_monthly_limit - data.monthly_usage);
+            if (remaining <= Math.min(5, data.free_monthly_limit * 0.1)) {
+                remainingNote.textContent = remaining === 0 ? "Kuota pencatatan bulan ini habis" : "Tersisa " + number(remaining) + " pencatatan bulan ini";
+                remainingNote.hidden = false;
+            }
         } else {
             output.textContent = validUsage ? number(data.monthly_usage) + " pencatatan digunakan" : "Pemakaian belum tersedia.";
         }
