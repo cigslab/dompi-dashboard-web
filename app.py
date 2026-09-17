@@ -5,7 +5,7 @@ import hmac
 import json
 import re
 import time
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from urllib.parse import parse_qsl
 
@@ -169,10 +169,64 @@ def profile():
             (name.strip() for name in names if isinstance(name, str) and name.strip()),
             "User",
         )
-        return jsonify(display_name=display_name)
+        username = row[1].strip() if row and isinstance(row[1], str) and row[1].strip() else None
+        return jsonify(display_name=display_name, username=username)
     except Exception:
         app.logger.exception("Profile query failed")
         return jsonify(error="Gagal mengambil profil"), 500
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
+
+
+def configured_free_monthly_limit():
+    """Optional display configuration, independent of the bot's quota enforcement."""
+    raw = os.environ.get("FREE_MONTHLY_LIMIT", "").strip()
+    # Keep the JSON integer exact in the browser and bound parsing work.
+    if not re.fullmatch(r"[0-9]{1,16}", raw):
+        return None
+    value = int(raw)
+    return value if 0 < value <= 9007199254740991 else None
+
+
+@app.route("/api/account")
+def account():
+    """Read the bot's existing quota ledger; never derive usage from expenses."""
+    conn = cursor = None
+    try:
+        now = datetime.now()  # Same server-local month/expiry convention as the bot.
+        month = now.strftime("%Y-%m")
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT plan, pro_until, joined_at FROM users WHERE telegram_id = %s", (g.user_id,))
+        row = cursor.fetchone()
+        if not row:
+            return jsonify(error="Akun belum tersedia"), 404
+        plan, pro_until, joined_at = row
+        plan = plan if plan in ("free", "pro") else None
+        if plan == "pro" and pro_until:
+            try:
+                expiry = datetime.strptime(str(pro_until), "%Y-%m-%d %H:%M:%S")
+                if now >= expiry:
+                    plan = "free"
+            except ValueError:
+                plan = None
+        cursor.execute("SELECT expense_count FROM monthly_usage WHERE user_id = %s AND month = %s", (g.user_id, month))
+        usage_row = cursor.fetchone()
+        usage = usage_row[0] if usage_row else 0  # Bot also treats an absent month as zero.
+        if type(usage) is not int or usage < 0:
+            usage = None
+        try:
+            joined_at = datetime.strptime(str(joined_at), "%Y-%m-%d %H:%M:%S").strftime("%Y-%m-%d") if joined_at else None
+        except ValueError:
+            joined_at = None
+        return jsonify(plan=plan, monthly_usage=usage, usage_month=month,
+                       free_monthly_limit=configured_free_monthly_limit(), joined_at=joined_at)
+    except Exception:
+        app.logger.exception("Account query failed")
+        return jsonify(error="Informasi akun belum tersedia"), 500
     finally:
         if cursor:
             cursor.close()

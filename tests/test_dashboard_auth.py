@@ -47,7 +47,7 @@ def signed(user_id=101, age=0, token=TOKEN, **extra):
 
 READS = ['/api/summary', '/api/cashflow', '/api/analytics/monthly',
          '/api/categories', '/api/transactions']
-ENDPOINTS = [('GET', p) for p in READS] + [('GET', '/api/reports'), ('GET', '/api/profile'), ('GET', '/api/categories/breakdown')] + [
+ENDPOINTS = [('GET', p) for p in READS] + [('GET', '/api/reports'), ('GET', '/api/profile'), ('GET', '/api/account'), ('GET', '/api/categories/breakdown')] + [
     ('PATCH', '/api/transactions/1'), ('DELETE', '/api/transactions/1')]
 PAYLOAD = {'category': 'updated', 'amount': 15, 'note': 'test', 'type': 'expense'}
 
@@ -105,6 +105,10 @@ class PostgresFixture:
 
 class DashboardAuthTests(unittest.TestCase):
     def setUp(self):
+        limit_env = patch.dict(os.environ)
+        limit_env.start()
+        self.addCleanup(limit_env.stop)
+        os.environ.pop('FREE_MONTHLY_LIMIT', None)
         self.clock = patch.object(api.time, 'time', return_value=NOW)
         self.clock.start()
         self.addCleanup(self.clock.stop)
@@ -124,8 +128,10 @@ class DashboardAuthTests(unittest.TestCase):
         else:
             self.db = sqlite3.connect(':memory:')
         self.addCleanup(self.db.close)
-        self.db.execute('CREATE TABLE users (telegram_id BIGINT PRIMARY KEY, first_name TEXT, username TEXT)')
-        self.db.executemany('INSERT INTO users VALUES (?,?,?)', [(101, 'Nama A', 'user_a'), (202, 'Nama B', 'user_b')])
+        self.db.execute('DROP TABLE IF EXISTS monthly_usage')
+        self.db.execute('CREATE TABLE monthly_usage (user_id BIGINT, month TEXT, expense_count INTEGER, PRIMARY KEY(user_id, month))')
+        self.db.execute('CREATE TABLE users (telegram_id BIGINT PRIMARY KEY, first_name TEXT, username TEXT, plan TEXT, pro_until TEXT, joined_at TEXT)')
+        self.db.executemany('INSERT INTO users (telegram_id, first_name, username) VALUES (?,?,?)', [(101, 'Nama A', 'user_a'), (202, 'Nama B', 'user_b')])
         self.db.execute('CREATE TABLE expenses (user_id INTEGER, transaction_id INTEGER, category TEXT, analytics_category TEXT, amount BIGINT, note TEXT, date TEXT, type TEXT, currency TEXT)')
         self.db.executemany('INSERT INTO expenses VALUES (?,?,?,?,?,?,?,?,?)', [
             (101, 1, 'A expense', 'Food', 10, 'A', '2026-09-14', 'expense', 'IDR'),
@@ -289,28 +295,73 @@ class DashboardAuthTests(unittest.TestCase):
             self.assertEqual(self.report(query).status_code, 400)
         self.get_connection.assert_not_called()
 
+    def test_account_configured_limit_free_and_pro(self):
+        for plan in ('free', 'pro'):
+            with self.subTest(plan=plan):
+                self.db.execute('UPDATE users SET plan=? WHERE telegram_id=101', (plan,))
+                self.db.commit()
+                with patch.dict(os.environ, {'FREE_MONTHLY_LIMIT': ' 75 '}):
+                    response = self.request('GET', '/api/account', signed())
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.json['plan'], plan)
+                self.assertEqual(response.json['free_monthly_limit'], 75)
+                self.assertIs(type(response.json['free_monthly_limit']), int)
+
+    def test_account_missing_limit(self):
+        self.assertIsNone(self.request('GET', '/api/account', signed()).json['free_monthly_limit'])
+
+    def test_account_invalid_limit(self):
+        for value in ('', ' ', '0', '-1', '1.5', '50.0', '1e2', '+50', 'true', 'NaN', 'Infinity', '５０', '9007199254740992', '9' * 5000):
+            with self.subTest(value=value[:30]), patch.dict(os.environ, {'FREE_MONTHLY_LIMIT': value}):
+                response = self.request('GET', '/api/account', signed())
+                self.assertEqual(response.status_code, 200)
+                self.assertIsNone(response.json['free_monthly_limit'])
+
+    def test_account_ledger_owner_and_expiry(self):
+        month = api.datetime.now().strftime('%Y-%m')
+        self.db.execute("UPDATE users SET plan='pro', pro_until='2000-01-01 00:00:00', joined_at='2025-01-02 03:04:05' WHERE telegram_id=101")
+        self.db.executemany('INSERT INTO monthly_usage VALUES (?,?,?)', [(101, month, 37), (202, month, 99), (101, '2000-01', 88)])
+        self.db.commit()
+        response = self.request('GET', '/api/account?user_id=202', signed(), json={'user_id': 202})
+        self.assertEqual(response.json, dict(plan='free', monthly_usage=37, usage_month=month, free_monthly_limit=None, joined_at='2025-01-02'))
+        self.assertEqual(response.headers['Cache-Control'], 'no-store')
+        self.assertEqual(self.db.execute('SELECT plan FROM users WHERE telegram_id=101').fetchone()[0], 'pro')
+
+    def test_account_missing_and_unknown_data(self):
+        result = self.request('GET', '/api/account', signed()).json
+        self.assertIsNone(result['plan'])
+        self.assertIsNone(result['joined_at'])
+        self.assertEqual(result['monthly_usage'], 0)
+        self.assertEqual(self.request('GET', '/api/account', signed(303)).status_code, 404)
+        self.db.execute("UPDATE users SET plan='pro', pro_until='2099-01-01 00:00:00' WHERE telegram_id=101")
+        self.db.commit()
+        self.assertEqual(self.request('GET', '/api/account', signed()).json['plan'], 'pro')
+        self.db.execute("UPDATE users SET pro_until='invalid', joined_at='invalid' WHERE telegram_id=101")
+        self.db.commit()
+        self.assertIsNone(self.request('GET', '/api/account', signed()).json['plan'])
+
     def test_profile_user_a_uses_database_name(self):
         response = self.request('GET', '/api/profile?user_id=202', signed(), json={'user_id': 202})
-        self.assertEqual(response.json, {'display_name': 'Nama A'})
+        self.assertEqual(response.json, {'display_name': 'Nama A', 'username': 'user_a'})
         self.assertEqual(response.headers['Cache-Control'], 'no-store')
 
     def test_profile_user_b_uses_database_name(self):
         self.assertEqual(self.request('GET', '/api/profile', signed(202)).json,
-                         {'display_name': 'Nama B'})
+                         {'display_name': 'Nama B', 'username': 'user_b'})
 
     def test_profile_falls_back_to_username(self):
         self.db.execute("UPDATE users SET first_name='  ' WHERE telegram_id=101")
         self.db.commit()
         self.assertEqual(self.request('GET', '/api/profile', signed()).json,
-                         {'display_name': 'user_a'})
+                         {'display_name': 'user_a', 'username': 'user_a'})
 
     def test_profile_falls_back_to_user(self):
         self.db.execute("UPDATE users SET first_name=NULL, username=NULL WHERE telegram_id=101")
         self.db.commit()
         self.assertEqual(self.request('GET', '/api/profile', signed()).json,
-                         {'display_name': 'User'})
+                         {'display_name': 'User', 'username': None})
         self.assertEqual(self.request('GET', '/api/profile', signed(303)).json,
-                         {'display_name': 'User'})
+                         {'display_name': 'User', 'username': None})
 
     def test_runtime_honors_port_and_has_no_bot_imports(self):
         import runpy

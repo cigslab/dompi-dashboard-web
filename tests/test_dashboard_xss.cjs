@@ -33,7 +33,8 @@ function setup(attack) {
     const pathname=new URL(url,location.href).pathname;
     window.__testCalls.push({path:pathname,query:new URL(url,location.href).search,method:options.method||'GET',body:options.body,auth:new Headers(options.headers).get('Authorization')});
     let data;
-    if(pathname==='/api/profile') data={display_name:attack?payloads[0]:'Nama A'};
+    if(pathname==='/api/profile') { if(window.__profileError) return new Response('{}',{status:500}); data={display_name:attack?payloads[0]:'Nama A',username:window.__noUsername?null:(attack?payloads[1]:'user_a')}; }
+    else if(pathname==='/api/account') { if(window.__accountError) return new Response('{}',{status:500}); data={plan:window.__unknownAccount?null:(window.__accountPlan||'free'),monthly_usage:window.__unknownAccount?null:(window.__accountUsage??37),usage_month:month,joined_at:null,free_monthly_limit:window.__accountLimit??null}; }
     else if(options.method&&options.method!=='GET') data={success:true};
     else if(pathname==='/api/categories/breakdown') {
       if(window.__analyticsError) return new Response('{}',{status:500});
@@ -86,9 +87,39 @@ async function runTests(index,attack){
       eq(getComputedStyle(document.querySelector('.menu')).position,'static','no fixed bottom navigation');
     }
 
-    eq(/\b(Pro|Free|quota|kuota)\b/.test(document.querySelector('#accountPage').textContent),false,'no invented plan');
+    eq(document.querySelector('#accountPlan').textContent,'Paket Free','backend plan rendered');
     send('#accountMenu','click');await wait();
     eq(document.querySelector('#accountPage').classList.contains('page-hidden'),false,'account visible');
+    await wait();await wait();
+    eq(document.querySelector('#accountUsername').textContent,attack?'@<svg onload="window.__dompiXss = 2"></svg>':'@user_a','username rendered as text');
+    eq(document.querySelector('#accountUsage').textContent,'37 pencatatan digunakan','account ledger independent of report count');
+    window.__profileError=true;window.__accountError=true;
+    await loadProfile();await wait();await wait();
+    eq(document.querySelector('#accountProfileRetry').hidden,false,'profile error retry');
+    eq(document.querySelector('#accountUsageRetry').hidden,false,'usage error retry');
+    window.__profileError=false;window.__accountError=false;window.__noUsername=true;
+    send('#accountProfileRetry','click');await wait();await wait();await wait();
+    eq(document.querySelector('#accountUsername').hidden,true,'missing username hidden');
+    eq(document.querySelector('#accountUsage').textContent,'37 pencatatan digunakan','usage retry recovered');
+    eq(document.querySelector('#accountProfileRetry').hidden,true,'profile retry recovered');
+    eq(document.querySelector('#accountQuotaProgress').hidden,true,'missing limit has no progress');
+    window.__accountLimit=50;await loadAccountUsage();
+    eq(document.querySelector('#accountUsage').textContent,'37 / 50 pencatatan bulan ini','configured Free usage and limit');
+    eq(document.querySelector('#accountQuotaProgress').hidden,false,'Free progress visible');
+    eq(document.querySelector('#accountQuotaProgress').value,37,'Free progress value');
+    eq(document.querySelector('#accountQuotaProgress').max,50,'Free progress maximum');
+    window.__accountUsage=70;await loadAccountUsage();
+    eq(document.querySelector('#accountUsage').textContent,'70 / 50 pencatatan bulan ini','over limit count preserved');
+    eq(document.querySelector('#accountQuotaProgress').value,50,'over limit progress capped');
+    window.__accountPlan='pro';await loadAccountUsage();
+    eq(document.querySelector('#accountQuotaProgress').hidden,true,'Pro hides Free progress');
+    eq(document.querySelector('#accountUsage').textContent,'Unlimited — pencatatan tanpa batas','Pro unlimited status');
+    window.__accountPlan='free';window.__accountLimit='50';await loadAccountUsage();
+    eq(document.querySelector('#accountQuotaProgress').hidden,true,'invalid limit hides progress');
+    window.__accountLimit=50;window.__unknownAccount=true;await loadAccountUsage();
+    eq(document.querySelector('#accountQuotaProgress').hidden,true,'unknown usage hides progress');
+    window.__unknownAccount=false;window.__accountUsage=37;window.__accountLimit=null;
+
     eq(document.querySelectorAll('main > :not(.page-hidden)').length,1,'one visible page');
     send('#overviewMenu','click');
     eq(window.__dompiXss,0,'no executed payload');

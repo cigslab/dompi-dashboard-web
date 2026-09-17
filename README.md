@@ -10,6 +10,11 @@ No checkout, import, or runtime process from the bot repository is required.
 - `INIT_DATA_MAX_AGE_SECONDS`: defaults to `3600`.
 - `DASHBOARD_ALLOWED_ORIGINS`: comma-separated allowed frontend origins; no URL paths.
 - `PORT`: Railway HTTP port; defaults to `5000` locally.
+- `FREE_MONTHLY_LIMIT`: optional dashboard display limit. Set it to the same limit
+  used by the bot. Accepts trimmed ASCII decimal digits representing a positive
+  integer up to `9007199254740991` (at most 16 digits). Missing, blank, zero,
+  negative, fractional, or invalid values yield JSON `null`, with no default.
+  This setting does not change bot quota enforcement or write to the database.
 
 Start command: `python app.py` (Waitress, `0.0.0.0:$PORT`).
 Health check: `/health` (process health only; does not query the database).

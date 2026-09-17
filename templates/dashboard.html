@@ -33,8 +33,24 @@
         <main class="main-content">
             <section id="accountPage" class="page-hidden">
                 <header class="page-header"><h1>Akun</h1></header>
-                <div class="panel"><div class="avatar" data-profile-avatar>U</div><h2 data-display-name>User</h2>
-                <p>Profil akun Telegram Anda.</p></div>
+                <div class="account-layout">
+                    <section class="panel account-identity" aria-label="Profil Telegram">
+                        <div class="avatar account-avatar" data-profile-avatar aria-hidden="true">U</div>
+                        <div class="account-identity-text"><h2 data-display-name>User</h2>
+                            <p id="accountUsername" hidden></p><p class="account-caption">Terhubung melalui Telegram</p></div>
+                    </section>
+                    <p id="accountProfileStatus" role="status" aria-live="polite"></p>
+                    <button type="button" id="accountProfileRetry" class="account-retry" hidden>Coba lagi profil</button>
+                    <section class="panel account-usage" aria-labelledby="accountUsageHeading">
+                        <h2 id="accountUsageHeading">Paket &amp; pemakaian</h2>
+                        <p id="accountPlan" hidden></p>
+                        <p id="accountJoined" class="account-caption" hidden></p>
+                        <p id="accountUsage" role="status" aria-live="polite">Memuat…</p>
+                        <progress id="accountQuotaProgress" aria-label="Pemakaian kuota bulanan Free" aria-describedby="accountUsage" hidden></progress>
+                        <p id="accountQuotaNote" class="account-caption" hidden></p>
+                        <button type="button" id="accountUsageRetry" class="account-retry" hidden>Coba lagi informasi akun</button>
+                    </section>
+                </div>
             </section>
         <div id="overviewPage">
 
@@ -567,11 +583,69 @@ if (!telegramApp?.initData) {
 }
 </script>
 <script>
+let profileRequest = 0;
+let accountUsageRequest = 0;
+async function loadAccountUsage() {
+    const version = ++accountUsageRequest;
+    const output = document.getElementById("accountUsage");
+    const retry = document.getElementById("accountUsageRetry");
+    output.textContent = "Memuat…";
+    const progress = document.getElementById("accountQuotaProgress");
+    const quotaNote = document.getElementById("accountQuotaNote");
+    progress.hidden = true;
+    quotaNote.hidden = true;
+    document.getElementById("accountPlan").hidden = true;
+    document.getElementById("accountJoined").hidden = true;
+    retry.hidden = true;
+    try {
+        const response = await apiFetch("/api/account");
+        if (!response.ok) throw new Error("Usage unavailable");
+        const data = await response.json();
+        if (version !== accountUsageRequest) return;
+        const plan = document.getElementById("accountPlan");
+        plan.textContent = data.plan === "free" ? "Paket Free" : data.plan === "pro" ? "Paket Pro" : "";
+        plan.hidden = !plan.textContent;
+        const joined = document.getElementById("accountJoined");
+        joined.textContent = typeof data.joined_at === "string" && /^\d{4}-\d{2}-\d{2}$/.test(data.joined_at) ? "Bergabung " + data.joined_at : "";
+        joined.hidden = !joined.textContent;
+        const validUsage = Number.isSafeInteger(data.monthly_usage) && data.monthly_usage >= 0;
+        const validLimit = Number.isSafeInteger(data.free_monthly_limit) && data.free_monthly_limit > 0;
+        const number = value => new Intl.NumberFormat("id-ID").format(value);
+        if (data.plan === "pro") {
+            output.textContent = "Unlimited — pencatatan tanpa batas";
+        } else if (data.plan === "free" && validUsage && validLimit) {
+            output.textContent = number(data.monthly_usage) + " / " + number(data.free_monthly_limit) + " pencatatan bulan ini";
+            progress.max = data.free_monthly_limit;
+            progress.value = Math.min(data.monthly_usage, data.free_monthly_limit);
+            progress.hidden = false;
+        } else {
+            output.textContent = validUsage ? number(data.monthly_usage) + " pencatatan digunakan" : "Pemakaian belum tersedia.";
+        }
+        if (data.plan === "free") {
+            quotaNote.textContent = validLimit
+                ? "Pemakaian bulan berjalan. Menghapus transaksi tidak mengembalikan kuota."
+                : "Batas bulanan belum tersedia. Menghapus transaksi tidak mengembalikan kuota.";
+            quotaNote.hidden = false;
+        }
+    } catch (error) {
+        if (version !== accountUsageRequest) return;
+        output.textContent = "Informasi akun belum dapat dimuat.";
+        retry.hidden = false;
+    }
+}
 async function loadProfile() {
+    const version = ++profileRequest;
+    const status = document.getElementById("accountProfileStatus");
+    const retry = document.getElementById("accountProfileRetry");
+    status.textContent = "Memuat profil…";
+    retry.hidden = true;
+    document.getElementById("accountUsername").hidden = true;
+    loadAccountUsage();
     try {
         const response = await apiFetch("/api/profile");
-        if (!response.ok) return;
+        if (!response.ok) throw new Error("Profile unavailable");
         const data = await response.json();
+        if (version !== profileRequest) return;
         const name = typeof data.display_name === "string" && data.display_name.trim()
             ? data.display_name : "User";
         document.querySelectorAll("[data-display-name]").forEach(element => {
@@ -580,10 +654,18 @@ async function loadProfile() {
         document.querySelectorAll("[data-profile-avatar]").forEach(element => {
             element.textContent = Array.from(name)[0].toUpperCase();
         });
+        const username = document.getElementById("accountUsername");
+        username.textContent = typeof data.username === "string" && data.username.trim() ? "@" + data.username.trim() : "";
+        username.hidden = !username.textContent;
+        status.textContent = "";
     } catch (error) {
-        // Keep the neutral placeholder; apiFetch handles authentication errors.
+        if (version !== profileRequest) return;
+        status.textContent = "Profil belum dapat dimuat.";
+        retry.hidden = false;
     }
 }
+document.getElementById("accountProfileRetry").addEventListener("click", loadProfile);
+document.getElementById("accountUsageRetry").addEventListener("click", loadAccountUsage);
 loadProfile();
 </script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
