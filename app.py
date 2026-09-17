@@ -152,6 +152,11 @@ def home():
     return render_template("dashboard.html")
 
 
+@app.route("/help")
+def help_page():
+    return render_template("help.html")
+
+
 @app.route("/privacy")
 def privacy_page():
     return render_template("privacy.html")

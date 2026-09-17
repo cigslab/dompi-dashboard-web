@@ -117,7 +117,7 @@ async function runTests(index,attack){
     document.querySelectorAll('button.account-action').forEach(button=>button.click());
     eq(window.__testCalls.length,callsBeforeActions,'placeholders never call API');
     eq([...document.querySelectorAll('button.account-action')].every(button=>button.disabled),true,'remaining placeholder actions disabled');
-    eq([...document.querySelectorAll('a.account-action')].map(a=>a.getAttribute('href')),['/privacy','/terms'],'public legal links active');
+    eq([...document.querySelectorAll('a.account-action')].map(a=>a.getAttribute('href')),['/help','/privacy','/terms'],'public help and legal links active');
     window.__accountUsage=49;await loadAccountUsage();
     eq(document.querySelector('#accountQuotaRemaining').textContent,'Tersisa 1 pencatatan bulan ini','near limit message');
     eq(document.querySelector('#accountQuotaRemaining').hidden,false,'near limit visible');
