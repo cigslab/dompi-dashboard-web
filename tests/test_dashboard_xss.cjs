@@ -114,9 +114,10 @@ async function runTests(index,attack){
     eq(formatAccountJoined('<img src=x onerror=alert(1)>'),'','unsafe date hidden');
     eq(text('.account-action > span:first-child'),['Upgrade ke Pro','Bantuan & Feedback','Kebijakan Privasi','Syarat & Ketentuan','Hapus Data / Akun'],'compact account action list');
     const callsBeforeActions=window.__testCalls.length;
-    document.querySelectorAll('.account-action').forEach(button=>button.click());
+    document.querySelectorAll('button.account-action').forEach(button=>button.click());
     eq(window.__testCalls.length,callsBeforeActions,'placeholders never call API');
-    eq([...document.querySelectorAll('.account-action')].every(button=>button.disabled),true,'placeholder actions disabled');
+    eq([...document.querySelectorAll('button.account-action')].every(button=>button.disabled),true,'remaining placeholder actions disabled');
+    eq([...document.querySelectorAll('a.account-action')].map(a=>a.getAttribute('href')),['/privacy','/terms'],'public legal links active');
     window.__accountUsage=49;await loadAccountUsage();
     eq(document.querySelector('#accountQuotaRemaining').textContent,'Tersisa 1 pencatatan bulan ini','near limit message');
     eq(document.querySelector('#accountQuotaRemaining').hidden,false,'near limit visible');

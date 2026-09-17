@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="id">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="color-scheme" content="dark">
+    <title>{% block title %}{% endblock %} — Dompi</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='legal.css') }}">
+</head>
+<body>
+    <a class="skip-link" href="#content">Lewati ke isi</a>
+    <header><a class="brand" href="/">Dompi<span>dompet pintar</span></a><a href="/">Kembali ke aplikasi</a></header>
+    <main id="content">
+        <p class="eyebrow">Informasi layanan</p>
+        {% block content %}{% endblock %}
+    </main>
+    <footer><nav aria-label="Informasi legal"><a href="/privacy" {% if request.path == '/privacy' %}aria-current="page"{% endif %}>Kebijakan Privasi</a><a href="/terms" {% if request.path == '/terms' %}aria-current="page"{% endif %}>Syarat &amp; Ketentuan</a></nav><p>Dompi · Pencatatan keuangan melalui Telegram</p></footer>
+</body>
+</html>
