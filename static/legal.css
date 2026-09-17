@@ -19,3 +19,9 @@ footer nav { display: flex; flex-wrap: wrap; gap: 8px 24px; }
 a:focus-visible { outline: 2px solid #4ade80; outline-offset: 4px; border-radius: 3px; }
 .skip-link { position: absolute; left: 20px; top: -100px; padding: 12px; background: #141d18; }
 .skip-link:focus { top: 8px; }
+
+.upgrade-prices { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 16px 0; }
+.upgrade-prices > div { padding: 16px; border: 1px solid #293830; border-radius: 14px; background: #141d18; }
+.upgrade-prices h3 { margin: 0 0 8px; font-size: 16px; }
+.upgrade-prices p { color: #4ade80; font-size: 24px; font-weight: 700; margin: 0; }
+.upgrade-cta { display: inline-flex; align-items: center; min-height: 48px; padding: 12px 18px; border-radius: 12px; color: #092312; background: #4ade80; text-decoration: none; font-weight: 650; }

@@ -152,6 +152,11 @@ def home():
     return render_template("dashboard.html")
 
 
+@app.route("/upgrade")
+def upgrade_page():
+    return render_template("upgrade.html")
+
+
 @app.route("/help")
 def help_page():
     return render_template("help.html")

@@ -7,7 +7,7 @@ from test_dashboard_auth import api
 class PublicPageTests(unittest.TestCase):
     def test_public_legal_pages_without_auth_or_database(self):
         with patch.object(api, 'get_connection') as connection:
-            for route, title in (('/privacy', 'Kebijakan Privasi'), ('/terms', 'Syarat &amp; Ketentuan'), ('/help', 'Bantuan &amp; Feedback')):
+            for route, title in (('/privacy', 'Kebijakan Privasi'), ('/terms', 'Syarat &amp; Ketentuan'), ('/help', 'Bantuan &amp; Feedback'), ('/upgrade', 'Upgrade ke Pro')):
                 with self.subTest(route=route):
                     response = api.app.test_client().get(route)
                     self.assertEqual(response.status_code, 200)
@@ -24,6 +24,15 @@ class PublicPageTests(unittest.TestCase):
         self.assertIn('href="https://t.me/pakedompi"', html)
         self.assertIn('href="https://t.me/catetexpbot"', html)
         self.assertNotIn('<form', html)
+
+    def test_upgrade_is_manual_and_uses_existing_prices(self):
+        html = api.app.test_client().get('/upgrade').get_data(as_text=True)
+        self.assertIn('href="https://t.me/pakedompi"', html)
+        self.assertIn('Rp9.900', html)
+        self.assertIn('Rp79.000', html)
+        self.assertIn('setelah pembayaran diverifikasi', html)
+        self.assertNotIn('<form', html)
+        self.assertEqual(api.app.test_client().post('/upgrade').status_code, 405)
 
     def test_account_api_still_requires_auth(self):
         with patch.object(api, 'get_connection') as connection:
