@@ -91,3 +91,13 @@ For substantial changes:
 5. Do not commit until explicitly requested.
 
 If unrelated issues are discovered, list them separately instead of expanding scope.
+
+## Efficiency rules
+
+- Do not repeat audits, tests, or inspections that were completed successfully in the immediately preceding task unless the current change could invalidate them.
+- Before running a test, check whether the changed files can affect that test.
+- Reuse verified results from the current clean checkpoint when safe.
+- Prefer targeted tests during implementation; run full regression only before checkpoint, push, or deploy.
+- Do not re-read the entire repository for narrowly scoped tasks.
+- Use git diff and changed files to determine the minimum necessary validation.
+- If a task resumes after a usage limit or context compaction, continue from the current working tree and recent verified state instead of restarting analysis.
