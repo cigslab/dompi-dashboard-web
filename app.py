@@ -9,6 +9,8 @@ from datetime import date, datetime, timedelta
 from decimal import Decimal
 from urllib.parse import parse_qsl
 
+from itsdangerous import URLSafeTimedSerializer, BadSignature
+
 import psycopg2
 from flask import Flask, jsonify, render_template, request, g
 from flask_cors import CORS
@@ -613,6 +615,56 @@ def reports():
     except Exception:
         app.logger.exception("Report query failed")
         return jsonify(error="Gagal mengambil laporan"), 500
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
+
+
+reset_serializer = URLSafeTimedSerializer(BOT_TOKEN, salt="dompi-transaction-reset-v1")
+
+
+@app.route("/api/transactions/reset", methods=["GET", "DELETE"])
+def reset_transactions():
+    """Confirm an immutable set of internal expense IDs, never reset account/quota."""
+    conn = cursor = None
+    try:
+        if request.method == "DELETE":
+            body = request.get_json(silent=True)
+            if not isinstance(body, dict) or body.get("confirmation") != "HAPUS":
+                return jsonify(error="Konfirmasi HAPUS diperlukan"), 400
+            token = body.get("token")
+            if not isinstance(token, str) or len(token) > 250000:
+                return jsonify(error="Konfirmasi tidak valid"), 400
+            try:
+                snapshot = reset_serializer.loads(token, max_age=300)
+            except BadSignature:
+                return jsonify(error="Konfirmasi kedaluwarsa atau tidak valid. Mulai ulang."), 400
+            if not isinstance(snapshot, dict) or snapshot.get("owner") != g.user_id:
+                return jsonify(error="Konfirmasi tidak valid untuk akun ini"), 403
+            ids = snapshot.get("ids")
+            if not isinstance(ids, list) or len(ids) > 10000 or any(type(i) is not int or i <= 0 for i in ids):
+                return jsonify(error="Konfirmasi tidak valid"), 400
+            conn = get_connection()
+            cursor = conn.cursor()
+            if ids:
+                placeholders = ",".join(["%s"] * len(ids))
+                cursor.execute("DELETE FROM expenses WHERE user_id = %s AND id IN (" + placeholders + ")", (g.user_id, *ids))
+            conn.commit()
+            return jsonify(success=True)
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT id FROM expenses WHERE user_id = %s ORDER BY id LIMIT 10001", (g.user_id,))
+        ids = [row[0] for row in cursor.fetchall()]
+        if len(ids) > 10000:
+            return jsonify(error="Terlalu banyak transaksi untuk penghapusan mandiri. Hubungi bantuan."), 409
+        return jsonify(count=len(ids), token=reset_serializer.dumps({"owner": g.user_id, "ids": ids}))
+    except Exception:
+        if conn:
+            conn.rollback()
+        app.logger.exception("Transaction reset failed")
+        return jsonify(error="Penghapusan belum dapat dipastikan. Coba lagi dengan konfirmasi yang sama."), 500
     finally:
         if cursor:
             cursor.close()

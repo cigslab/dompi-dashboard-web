@@ -1977,3 +1977,12 @@ body {
 .account-action-upgrade { color: #4ade80; }
 .account-action-danger { color: #fca5a5; }
 .account-action-hint { flex-shrink: 0; color: #a8b8af; font-size: 12px; }
+
+#accountDeleteDialog { margin: auto; width: min(480px, calc(100% - 32px)); max-height: calc(100dvh - 48px); overflow-y: auto; padding: 24px; background: #141d18; color: #e7eee9; border: 1px solid #46574c; border-radius: 16px; }
+#accountDeleteDialog::backdrop { background: rgb(0 0 0 / 70%); }
+#accountDeleteDialog p { margin: 16px 0; line-height: 1.6; }
+#accountDeleteDialog button, #accountDeleteInput { min-height: 44px; padding: 10px 14px; margin: 8px 0; border: 1px solid #7b9385; border-radius: 8px; background: #1b2a21; color: #eef5f0; }
+#accountDeleteInput { display: block; width: 100%; }
+#accountDeleteDialog button:disabled { opacity: .5; }
+#accountDeleteConfirm { color: #fca5a5 !important; }
+#accountDeleteDialog :focus-visible { outline: 2px solid #4ade80; outline-offset: 3px; }

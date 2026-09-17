@@ -56,10 +56,27 @@
                         <li><a href="/help" class="account-action"><span>Bantuan &amp; Feedback</span><span aria-hidden="true">→</span></a></li>
                         <li><a href="/privacy" class="account-action"><span>Kebijakan Privasi</span><span aria-hidden="true">→</span></a></li>
                         <li><a href="/terms" class="account-action"><span>Syarat &amp; Ketentuan</span><span aria-hidden="true">→</span></a></li>
-                        <li><button type="button" disabled class="account-action account-action-danger"><span>Hapus Data / Akun</span><span class="account-action-hint">Segera</span></button></li>
+                        <li><button type="button" id="accountDeleteOpen" class="account-action account-action-danger"><span>Hapus Data / Akun</span><span aria-hidden="true">→</span></button></li>
                     </ul>
                 </div>
             </section>
+        <dialog id="accountDeleteDialog" aria-labelledby="accountDeleteTitle">
+            <h2 id="accountDeleteTitle">Hapus semua data transaksi</h2>
+            <div id="accountDeleteStepOne">
+                <p>Semua transaksi yang ada saat konfirmasi, termasuk nominal, tanggal, kategori, dan catatannya akan dihapus permanen dari Dompi.</p>
+                <p>Akun Telegram/Dompi, paket, pembayaran, dan pemakaian kuota tetap ada. Foto atau pesan di Telegram tidak ikut dihapus. Ini bukan penghapusan akun penuh.</p>
+                <button type="button" id="accountDeleteNext">Lanjut ke konfirmasi</button>
+            </div>
+            <form id="accountDeleteForm" hidden>
+                <p id="accountDeleteCount"></p>
+                <p>Transaksi baru setelah daftar konfirmasi dibuat tidak ikut dihapus. Tindakan ini tidak dapat dibatalkan.</p>
+                <label for="accountDeleteInput">Ketik HAPUS untuk konfirmasi terakhir</label>
+                <input id="accountDeleteInput" autocomplete="off" required pattern="HAPUS">
+                <button type="submit" id="accountDeleteConfirm">Hapus transaksi secara permanen</button>
+            </form>
+            <p id="accountDeleteStatus" role="status" aria-live="polite"></p>
+            <button type="button" id="accountDeleteClose">Batal</button>
+        </dialog>
         <div id="overviewPage">
 
             <header class="topbar">
@@ -597,6 +614,70 @@ function formatAccountJoined(value) {
     if (!Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== value) return "";
     return "Bergabung " + new Intl.DateTimeFormat("id-ID", {day: "numeric", month: "short", year: "numeric", timeZone: "UTC"}).format(date);
 }
+const resetDialog = document.getElementById("accountDeleteDialog");
+const resetForm = document.getElementById("accountDeleteForm");
+const resetStatus = document.getElementById("accountDeleteStatus");
+const resetNext = document.getElementById("accountDeleteNext");
+const resetConfirm = document.getElementById("accountDeleteConfirm");
+const resetClose = document.getElementById("accountDeleteClose");
+let resetToken = null;
+let resetBusy = false;
+document.getElementById("accountDeleteOpen").addEventListener("click", () => {
+    resetToken = null;
+    resetForm.reset();
+    resetForm.hidden = true;
+    document.getElementById("accountDeleteStepOne").hidden = false;
+    resetStatus.textContent = "";
+    resetNext.disabled = false;
+    resetConfirm.disabled = false;
+    resetClose.textContent = "Batal";
+    resetDialog.showModal();
+});
+resetClose.addEventListener("click", () => { if (!resetBusy) resetDialog.close(); });
+resetDialog.addEventListener("cancel", event => { if (resetBusy) event.preventDefault(); });
+resetDialog.addEventListener("close", () => document.getElementById("accountDeleteOpen").focus());
+resetNext.addEventListener("click", async () => {
+    if (resetBusy) return;
+    resetBusy = true;
+    resetNext.disabled = resetClose.disabled = true;
+    resetStatus.textContent = "Menyiapkan daftar transaksi…";
+    try {
+        const response = await apiFetch("/api/transactions/reset");
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Gagal menyiapkan konfirmasi.");
+        if (typeof data.token !== "string" || !Number.isSafeInteger(data.count) || data.count < 0) throw new Error("Konfirmasi tidak valid.");
+        resetToken = data.token;
+        document.getElementById("accountDeleteStepOne").hidden = true;
+        if (data.count === 0) {
+            resetStatus.textContent = "Tidak ada transaksi untuk dihapus.";
+            resetClose.textContent = "Tutup";
+        } else {
+            document.getElementById("accountDeleteCount").textContent = data.count + " transaksi akan dihapus. Konfirmasi berlaku 5 menit.";
+            resetForm.hidden = false;
+            resetStatus.textContent = "";
+            document.getElementById("accountDeleteInput").focus();
+        }
+    } catch (error) { resetStatus.textContent = error.message; }
+    finally { resetBusy = false; resetNext.disabled = resetClose.disabled = false; }
+});
+resetForm.addEventListener("submit", async event => {
+    event.preventDefault();
+    if (resetBusy || !resetToken || document.getElementById("accountDeleteInput").value !== "HAPUS") return;
+    resetBusy = true;
+    resetConfirm.disabled = resetClose.disabled = true;
+    resetStatus.textContent = "Menghapus transaksi…";
+    try {
+        const response = await apiFetch("/api/transactions/reset", {method: "DELETE", headers: {"Content-Type": "application/json"}, body: JSON.stringify({token: resetToken, confirmation: "HAPUS"})});
+        const data = await response.json();
+        if (!response.ok || data.success !== true) throw new Error(data.error || "Penghapusan belum dapat dipastikan. Coba lagi.");
+        resetToken = null;
+        resetForm.hidden = true;
+        resetStatus.textContent = "Berhasil. Semua transaksi dalam konfirmasi telah dihapus. Akun dan pemakaian kuota tetap ada.";
+        resetClose.textContent = "Tutup";
+        await Promise.allSettled([loadSummary(), loadCategories(), loadTransactions(), loadCashflowChart(), window.loadAnalytics(), loadAccountUsage()]);
+    } catch (error) { resetStatus.textContent = error.message; }
+    finally { resetBusy = false; resetConfirm.disabled = resetClose.disabled = false; }
+});
 let profileRequest = 0;
 let accountUsageRequest = 0;
 async function loadAccountUsage() {

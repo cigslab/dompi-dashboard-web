@@ -35,6 +35,7 @@ function setup(attack) {
     let data;
     if(pathname==='/api/profile') { if(window.__profileError) return new Response('{}',{status:500}); data={display_name:attack?payloads[0]:'Nama A',username:window.__noUsername?null:(attack?payloads[1]:'user_a')}; }
     else if(pathname==='/api/account') { if(window.__accountError) return new Response('{}',{status:500}); data={plan:window.__unknownAccount?null:(window.__accountPlan||'free'),monthly_usage:window.__unknownAccount?null:(window.__accountUsage??37),usage_month:month,joined_at:window.__accountJoined??'2026-09-07',free_monthly_limit:window.__accountLimit??null}; }
+    else if(pathname==='/api/transactions/reset') { if(options.method==='DELETE') { await new Promise(r=>setTimeout(r,100)); data={success:true}; } else data={count:4,token:'test-reset-token'}; }
     else if(options.method&&options.method!=='GET') data={success:true};
     else if(pathname==='/api/categories/breakdown') {
       if(window.__analyticsError) return new Response('{}',{status:500});
@@ -114,9 +115,9 @@ async function runTests(index,attack){
     eq(formatAccountJoined('<img src=x onerror=alert(1)>'),'','unsafe date hidden');
     eq(text('.account-action > span:first-child'),['Upgrade ke Pro','Bantuan & Feedback','Kebijakan Privasi','Syarat & Ketentuan','Hapus Data / Akun'],'compact account action list');
     const callsBeforeActions=window.__testCalls.length;
-    document.querySelectorAll('button.account-action').forEach(button=>button.click());
+    document.querySelectorAll('button.account-action:disabled').forEach(button=>button.click());
     eq(window.__testCalls.length,callsBeforeActions,'placeholders never call API');
-    eq([...document.querySelectorAll('button.account-action')].every(button=>button.disabled),true,'remaining placeholder actions disabled');
+    eq(document.querySelector('#accountDeleteOpen').disabled,false,'transaction reset entry active');
     eq([...document.querySelectorAll('a.account-action')].map(a=>a.getAttribute('href')),['/upgrade','/help','/privacy','/terms'],'public upgrade help and legal links active');
     window.__accountUsage=49;await loadAccountUsage();
     eq(document.querySelector('#accountQuotaRemaining').textContent,'Tersisa 1 pencatatan bulan ini','near limit message');
@@ -135,7 +136,7 @@ async function runTests(index,attack){
     eq(document.querySelector('#accountQuotaProgress').hidden,true,'unknown usage hides progress');
     window.__unknownAccount=false;window.__accountUsage=37;window.__accountLimit=null;
 
-    eq(document.querySelectorAll('main > :not(.page-hidden)').length,1,'one visible page');
+    eq(document.querySelectorAll('main > :not(.page-hidden):not(dialog)').length,1,'one visible page');
     send('#overviewMenu','click');
     eq(window.__dompiXss,0,'no executed payload');
     eq(document.querySelectorAll('img[src="x"],svg[onload],[onclick]').length,0,'no injected markup');
@@ -290,6 +291,22 @@ async function runTests(index,attack){
     eq(document.querySelectorAll('#analyticsReport img,#analyticsReport svg[onload]').length,0,'report no injected markup');
     eq(window.__testCalls.every(c=>c.auth==='tma test-init-data'),true,'reports authenticated');
     eq(window.__testErrors,[],'reports no page errors');
+    send('#accountMenu','click');await wait();
+    const resetDeletes=()=>window.__testCalls.filter(c=>c.path==='/api/transactions/reset'&&c.method==='DELETE').length;
+    send('#accountDeleteOpen','click');
+    eq(resetDeletes(),0,'opening dialog never deletes');
+    send('#accountDeleteClose','click');
+    eq(document.querySelector('#accountDeleteDialog').open,false,'cancel closes dialog');
+    send('#accountDeleteOpen','click');send('#accountDeleteNext','click');await wait();
+    eq(document.querySelector('#accountDeleteForm').hidden,false,'second confirmation shown');
+    send('#accountDeleteForm','submit');eq(resetDeletes(),0,'typed confirmation required');
+    document.querySelector('#accountDeleteInput').value='HAPUS';
+    send('#accountDeleteForm','submit');send('#accountDeleteForm','submit');
+    eq(resetDeletes(),1,'double submit sends one DELETE');
+    for(let i=0;i<50&&!document.querySelector('#accountDeleteStatus').textContent.startsWith('Berhasil.');i++)await wait();
+    eq(document.querySelector('#accountDeleteForm').hidden,true,'success prevents resubmit');
+    eq(document.querySelector('#accountDeleteStatus').textContent.startsWith('Berhasil.'),true,'explicit success state');
+    await wait();await wait();send('#accountDeleteClose','click');
     const result={pass:true,index,attack,checks,width:innerWidth};
     await window.__reportFetch('/results',{method:'POST',body:JSON.stringify(result)});
     const report=document.createElement('pre');report.id='xssTestResults';report.style.whiteSpace='pre-wrap';report.style.overflowWrap='anywhere';report.textContent=JSON.stringify(result);document.body.prepend(report);

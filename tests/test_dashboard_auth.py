@@ -47,7 +47,7 @@ def signed(user_id=101, age=0, token=TOKEN, **extra):
 
 READS = ['/api/summary', '/api/cashflow', '/api/analytics/monthly',
          '/api/categories', '/api/transactions']
-ENDPOINTS = [('GET', p) for p in READS] + [('GET', '/api/reports'), ('GET', '/api/profile'), ('GET', '/api/account'), ('GET', '/api/categories/breakdown')] + [
+ENDPOINTS = [('GET', p) for p in READS] + [('GET', '/api/reports'), ('GET', '/api/profile'), ('GET', '/api/account'), ('GET', '/api/transactions/reset'), ('DELETE', '/api/transactions/reset'), ('GET', '/api/categories/breakdown')] + [
     ('PATCH', '/api/transactions/1'), ('DELETE', '/api/transactions/1')]
 PAYLOAD = {'category': 'updated', 'amount': 15, 'note': 'test', 'type': 'expense'}
 
@@ -132,8 +132,8 @@ class DashboardAuthTests(unittest.TestCase):
         self.db.execute('CREATE TABLE monthly_usage (user_id BIGINT, month TEXT, expense_count INTEGER, PRIMARY KEY(user_id, month))')
         self.db.execute('CREATE TABLE users (telegram_id BIGINT PRIMARY KEY, first_name TEXT, username TEXT, plan TEXT, pro_until TEXT, joined_at TEXT)')
         self.db.executemany('INSERT INTO users (telegram_id, first_name, username) VALUES (?,?,?)', [(101, 'Nama A', 'user_a'), (202, 'Nama B', 'user_b')])
-        self.db.execute('CREATE TABLE expenses (user_id INTEGER, transaction_id INTEGER, category TEXT, analytics_category TEXT, amount BIGINT, note TEXT, date TEXT, type TEXT, currency TEXT)')
-        self.db.executemany('INSERT INTO expenses VALUES (?,?,?,?,?,?,?,?,?)', [
+        self.db.execute('CREATE TABLE expenses (user_id INTEGER, transaction_id INTEGER, category TEXT, analytics_category TEXT, amount BIGINT, note TEXT, date TEXT, type TEXT, currency TEXT, id ' + ('BIGSERIAL PRIMARY KEY' if dsn else 'INTEGER PRIMARY KEY AUTOINCREMENT') + ')')
+        self.db.executemany('INSERT INTO expenses (user_id, transaction_id, category, analytics_category, amount, note, date, type, currency) VALUES (?,?,?,?,?,?,?,?,?)', [
             (101, 1, 'A expense', 'Food', 10, 'A', '2026-09-14', 'expense', 'IDR'),
             (101, 2, 'A income', 'Salary', 100, 'A', '2026-09-14', 'income', 'IDR'),
             (202, 1, 'B expense', 'Secret', 999, 'B', '2026-09-14', 'expense', 'IDR'),
@@ -195,7 +195,7 @@ class DashboardAuthTests(unittest.TestCase):
                     conn.close.assert_called_once()
 
     def test_category_breakdown_period_ownership_percentages(self):
-        self.db.executemany('INSERT INTO expenses VALUES (?,?,?,?,?,?,?,?,?)', [
+        self.db.executemany('INSERT INTO expenses (user_id, transaction_id, category, analytics_category, amount, note, date, type, currency) VALUES (?,?,?,?,?,?,?,?,?)', [
             (101, 3, 'Bus', 'Transportasi', 30, '', '2026-09-15', 'expense', 'IDR'),
             (101, 4, 'Old', 'Food', 90, '', '2026-08-14', 'expense', 'IDR'),
             (101, 5, 'Foreign', 'Food', 9999, '', '2026-09-14', 'expense', 'USD'),
@@ -230,7 +230,7 @@ class DashboardAuthTests(unittest.TestCase):
             return self.request('GET', '/api/reports' + query, signed(user))
 
     def test_reports_current_ownership_idr_totals_and_categories(self):
-        self.db.executemany('INSERT INTO expenses VALUES (?,?,?,?,?,?,?,?,?)', [
+        self.db.executemany('INSERT INTO expenses (user_id, transaction_id, category, analytics_category, amount, note, date, type, currency) VALUES (?,?,?,?,?,?,?,?,?)', [
             (101, 3, 'Bus', 'Transportasi', 30, '', '2026-09-16 23:59:59', 'expense', 'IDR'),
             (101, 4, 'Foreign', 'Food', 9000, '', '2026-09-14', 'expense', 'USD'),
             (101, 5, 'Future', 'Food', 700, '', '2026-09-17', 'expense', 'IDR'),
@@ -251,7 +251,7 @@ class DashboardAuthTests(unittest.TestCase):
         self.assertEqual(response.headers['Cache-Control'], 'no-store')
 
     def test_reports_last_month_and_comparison(self):
-        self.db.executemany('INSERT INTO expenses VALUES (?,?,?,?,?,?,?,?,?)', [
+        self.db.executemany('INSERT INTO expenses (user_id, transaction_id, category, analytics_category, amount, note, date, type, currency) VALUES (?,?,?,?,?,?,?,?,?)', [
             (101, 3, 'Old', 'Food', 60, '', '2026-08-01', 'expense', 'IDR'),
             (101, 4, 'Old', 'Food', 40, '', '2026-08-31 23:59:59', 'expense', 'IDR'),
             (101, 5, 'Previous', 'Food', 50, '', '2026-07-01', 'expense', 'IDR'),
@@ -265,7 +265,7 @@ class DashboardAuthTests(unittest.TestCase):
 
     def test_reports_custom_inclusive_comparison_and_literal_category(self):
         payload = '<img src=x onerror=alert(1)>'
-        self.db.executemany('INSERT INTO expenses VALUES (?,?,?,?,?,?,?,?,?)', [
+        self.db.executemany('INSERT INTO expenses (user_id, transaction_id, category, analytics_category, amount, note, date, type, currency) VALUES (?,?,?,?,?,?,?,?,?)', [
             (101, 3, 'Previous', 'Food', 20, '', '2026-09-13', 'expense', 'IDR'),
             (101, 4, 'Extra', payload, 10, '', '2026-09-14 23:59:59', 'expense', 'IDR'),
         ])
@@ -294,6 +294,47 @@ class DashboardAuthTests(unittest.TestCase):
                       '?period=custom&start=0001-01-01&end=2026-09-14'):
             self.assertEqual(self.report(query).status_code, 400)
         self.get_connection.assert_not_called()
+
+    def test_reset_ownership_retry_and_new_transactions(self):
+        month = api.datetime.now().strftime('%Y-%m')
+        self.db.execute('INSERT INTO monthly_usage VALUES (?,?,?)', (101, month, 37))
+        self.db.commit()
+        token = self.request('GET', '/api/transactions/reset?user_id=202', signed()).json['token']
+        self.assertEqual(self.db.execute('SELECT COUNT(*) FROM expenses').fetchone()[0], 4)
+        body = {'token': token, 'confirmation': 'HAPUS', 'user_id': 202}
+        self.assertEqual(self.request('DELETE', '/api/transactions/reset', signed(202), json=body).status_code, 403)
+        self.assertEqual(self.request('DELETE', '/api/transactions/reset?user_id=202', signed(), json=body).json, {'success': True})
+        self.db.execute("INSERT INTO expenses (user_id, transaction_id, amount) VALUES (101,1,50)")
+        self.db.commit()
+        self.assertEqual(self.request('DELETE', '/api/transactions/reset', signed(), json=body).json, {'success': True})
+        self.assertEqual(self.db.execute('SELECT COUNT(*) FROM expenses WHERE user_id=202').fetchone()[0], 2)
+        self.assertEqual(self.db.execute('SELECT COUNT(*) FROM expenses WHERE user_id=101').fetchone()[0], 1)
+        self.assertEqual(self.db.execute('SELECT expense_count FROM monthly_usage WHERE user_id=101').fetchone()[0], 37)
+        self.assertEqual(self.db.execute('SELECT COUNT(*) FROM users').fetchone()[0], 2)
+
+    def test_reset_rolls_back_failed_commit(self):
+        token = self.request('GET', '/api/transactions/reset', signed()).json['token']
+        connection = api.get_connection()
+        class FailedCommit:
+            def cursor(self): return connection.cursor()
+            def commit(self): raise RuntimeError('simulated commit failure')
+            def rollback(self): connection.rollback()
+            def close(self): connection.close()
+        with patch.object(api, 'get_connection', return_value=FailedCommit()):
+            response = self.request('DELETE', '/api/transactions/reset', signed(), json={'token':token,'confirmation':'HAPUS'})
+        self.assertEqual(response.status_code, 500)
+        self.assertEqual(self.db.execute('SELECT COUNT(*) FROM expenses').fetchone()[0], 4)
+
+    def test_reset_requires_auth_and_explicit_confirmation(self):
+        for credential in (None, signed(age=3601), signed(token='wrong')):
+            self.assertEqual(self.request('DELETE', '/api/transactions/reset', credential, json={'confirmation':'HAPUS'}).status_code, 401)
+        token = self.request('GET', '/api/transactions/reset', signed()).json['token']
+        for body in ({}, {'token':token}, {'token':token+'x','confirmation':'HAPUS'}):
+            self.assertEqual(self.request('DELETE', '/api/transactions/reset', signed(), json=body).status_code, 400)
+        from itsdangerous import SignatureExpired
+        with patch.object(api.reset_serializer, 'loads', side_effect=SignatureExpired('expired')):
+            self.assertEqual(self.request('DELETE', '/api/transactions/reset', signed(), json={'token':token,'confirmation':'HAPUS'}).status_code, 400)
+        self.assertEqual(self.db.execute('SELECT COUNT(*) FROM expenses').fetchone()[0], 4)
 
     def test_account_configured_limit_free_and_pro(self):
         for plan in ('free', 'pro'):
@@ -393,7 +434,7 @@ class DashboardAuthTests(unittest.TestCase):
             self.assertIsNone(rupiah.parse_idr_amount(value))
 
     def test_idr_filters_and_legacy_mutations(self):
-        self.db.executemany('INSERT INTO expenses VALUES (?,?,?,?,?,?,?,?,?)', [
+        self.db.executemany('INSERT INTO expenses (user_id, transaction_id, category, analytics_category, amount, note, date, type, currency) VALUES (?,?,?,?,?,?,?,?,?)', [
             (101, 20, 'Legacy', 'Food', 1250, 'legacy', '2026-09-14', 'expense', currency)
             for currency in ['USD', None]
         ])
@@ -417,7 +458,7 @@ class DashboardAuthTests(unittest.TestCase):
                                           json={**PAYLOAD, 'amount': value}).status_code, 400)
 
     def test_latest_receipt_with_older_date_is_first_and_limit_remains_ten(self):
-        self.db.executemany('INSERT INTO expenses VALUES (?,?,?,?,?,?,?,?,?)', [
+        self.db.executemany('INSERT INTO expenses (user_id, transaction_id, category, analytics_category, amount, note, date, type, currency) VALUES (?,?,?,?,?,?,?,?,?)', [
             (101, i, 'Manual', 'Food', 18000, 'Manual',
              '2026-09-15 12:00:00', 'expense', 'IDR')
             for i in range(3, 13)
