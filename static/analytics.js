@@ -109,6 +109,21 @@ let monthlyRequest = 0;
                                 const previousNet =
                                     previous.income - previous.expense;
 
+                                // Collapse only when BOTH compared months have no metric values.
+                                // Keep a zero current month visible when the previous month had activity.
+                                if ([current, previous].every(record =>
+                                    ['income', 'expense', 'transaction_count'].every(key => record[key] === 0))) {
+                                    const empty = document.createElement('div');
+                                    empty.className = 'monthly-comparison-row monthly-comparison-empty';
+                                    const heading = document.createElement('div');
+                                    heading.className = 'monthly-comparison-title';
+                                    heading.textContent = `${shortMonthLabel(current.month)} vs ${shortMonthLabel(previous.month)}`;
+                                    const message = document.createElement('p');
+                                    message.textContent = 'Belum ada aktivitas pada kedua bulan ini.';
+                                    empty.append(heading, message);
+                                    return empty;
+                                }
+
                                 const template = document.createElement("template");
                                 template.innerHTML = `
                                     <div class="monthly-comparison-row">
@@ -120,9 +135,6 @@ let monthlyRequest = 0;
                                         </div>
                                         <div class="monthly-comparison-metrics">
                                             <div class="monthly-comparison-metric">
-                                                <div class="monthly-comparison-icon income">
-                                                    ↑
-                                                </div>
 
                                                 <div class="monthly-comparison-content">
                                                     <span>Pemasukan</span>
@@ -136,9 +148,6 @@ let monthlyRequest = 0;
                                             </div>
 
                                             <div class="monthly-comparison-metric">
-                                                <div class="monthly-comparison-icon expense">
-                                                    ↓
-                                                </div>
 
                                                 <div class="monthly-comparison-content">
                                                     <span>Pengeluaran</span>
@@ -152,9 +161,6 @@ let monthlyRequest = 0;
                                             </div>
 
                                             <div class="monthly-comparison-metric">
-                                                <div class="monthly-comparison-icon net">
-                                                    ↕
-                                                </div>
 
                                                 <div class="monthly-comparison-content">
                                                     <span>Net Cashflow</span>
@@ -168,9 +174,6 @@ let monthlyRequest = 0;
                                             </div>
 
                                             <div class="monthly-comparison-metric">
-                                                <div class="monthly-comparison-icon transactions">
-                                                    #
-                                                </div>
 
                                                 <div class="monthly-comparison-content">
                                                     <span>Transaksi</span>

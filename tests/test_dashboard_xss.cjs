@@ -49,7 +49,7 @@ function setup(attack) {
     else if(pathname==='/api/summary') data={income:2000,expense:8000,balance:-6000};
     else if(pathname==='/api/cashflow') data=[{date,income:2000,expense:8000}];
     else if(pathname==='/api/categories') data=texts.map((category,i)=>({category,total:1000*(i+1)}));
-    else if(pathname==='/api/analytics/monthly') { if(window.__monthlyError) return new Response('{}',{status:500}); data=window.__monthlyEmpty?[]:[{month,income:200000,expense:800000,transaction_count:attack?payloads[0]:24}]; }
+    else if(pathname==='/api/analytics/monthly') { if(window.__monthlyError) return new Response('{}',{status:500}); data=window.__monthlyEmpty?[]:[{month,income:200000,expense:800000,transaction_count:attack?payloads[0]:24}]; if(window.__previousActivity){ const previous=new Date(now.getFullYear(),now.getMonth()-1,1); data=[{month,income:0,expense:0,transaction_count:0},{month:`${previous.getFullYear()}-${String(previous.getMonth()+1).padStart(2,'0')}`,income:10,expense:10,transaction_count:1}]; } }
     else if(pathname==='/api/transactions') data=transactions;
     else throw new Error('Unexpected mocked API '+pathname);
     return new Response(JSON.stringify(data),{headers:{'Content-Type':'application/json'}});
@@ -78,9 +78,12 @@ async function runTests(index,attack){
     eq(document.querySelector('#analyticsReport').closest('#analyticsPage')!==null,true,'report inside analytics');
     if(innerWidth<=900) {
       const nav=document.querySelector('.menu').getBoundingClientRect();
-      eq(Math.abs(nav.bottom-innerHeight)<2,true,'bottom navigation anchored');
+      eq(getComputedStyle(document.querySelector('.sidebar')).position,'sticky','top navigation sticky');
+      window.scrollTo(0,200);await wait();
+      eq(Math.abs(document.querySelector('.sidebar').getBoundingClientRect().top)<2,true,'top navigation stays anchored on scroll');
+      window.scrollTo(0,0);
       eq([...document.querySelectorAll('.menu-item')].every(e=>e.getBoundingClientRect().height>=44),true,'navigation touch targets');
-      eq(parseFloat(getComputedStyle(document.querySelector('.main-content')).paddingBottom)>=nav.height,true,'content clears bottom navigation');
+      eq(getComputedStyle(document.querySelector('.menu')).position,'static','no fixed bottom navigation');
     }
 
     eq(/\b(Pro|Free|quota|kuota)\b/.test(document.querySelector('#accountPage').textContent),false,'no invented plan');
@@ -94,6 +97,21 @@ async function runTests(index,attack){
       eq(text(selector),window.__testTexts,selector);
     if(document.querySelector('#categoryList'))eq(text('#categoryList strong'),window.__testTexts,'category panel');
     eq(text('.analytics-category-name').sort(),[...window.__testTexts].sort(),'analytics categories');
+    send('#analyticsMenu','click');await wait();
+    eq(document.querySelectorAll('.monthly-comparison-empty').length,2,'zero pairs collapse to compact empty states');
+    eq(document.querySelectorAll('.monthly-comparison-icon').length,0,'decorative comparison icons removed');
+    eq(document.querySelector('.monthly-comparison-row:not(.monthly-comparison-empty)').querySelectorAll('.monthly-comparison-metric').length,4,'all four metric values preserved');
+    if(innerWidth<=900) {
+      const cells=[...document.querySelector('.monthly-comparison-metrics').children].map(e=>e.getBoundingClientRect());
+      eq(Math.abs(cells[0].top-cells[1].top)<2&&Math.abs(cells[2].top-cells[3].top)<2&&cells[2].top>cells[0].bottom,true,'mobile metrics form two by two grid');
+      eq(document.querySelector('.monthly-comparison-empty').getBoundingClientRect().height<120,true,'empty comparison compact');
+    }
+    send('#overviewMenu','click');
+
+    window.__previousActivity=true;send('#analyticsPeriod','change');await wait();
+    eq(document.querySelectorAll('.monthly-comparison-empty').length,1,'previous activity prevents false empty state');
+    eq(document.querySelector('.monthly-comparison-content small').textContent.includes('100.0%'),true,'zero current month retains percentage decrease');
+    window.__previousActivity=false;send('#analyticsPeriod','change');await wait();
     eq(Array.from(document.querySelectorAll('.transaction-amount,.transaction-type'),e=>/^(transaction-amount|transaction-type) (income|expense)$/.test(e.className)).every(Boolean),true,'class whitelist');
     if(document.querySelector('.transaction-edit-button')){
       eq(document.querySelectorAll('.transaction-edit-button')[3].dataset.transactionId,String(window.__testTransactions[3].transaction_id),'ID literal');
