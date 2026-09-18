@@ -1986,3 +1986,12 @@ body {
 #accountDeleteDialog button:disabled { opacity: .5; }
 #accountDeleteConfirm { color: #fca5a5 !important; }
 #accountDeleteDialog :focus-visible { outline: 2px solid #4ade80; outline-offset: 3px; }
+
+/* Category drill-down: native dialog keeps keyboard focus inside the overlay. */
+.category-drill-trigger { width: 100%; color: inherit; font: inherit; text-align: left; background: transparent; cursor: pointer; }
+.category-drill-trigger:focus-visible { outline: 2px solid #67e58a; outline-offset: 2px; }
+.category-drill { color: #edf5ef; background: #17221d; border: 1px solid #43564a; border-radius: 16px; width: min(90vw, 560px); max-height: 85dvh; overflow: auto; padding: 20px; }
+.category-drill::backdrop { background: #0009; }
+.category-drill button { min-height: 44px; margin: 4px; padding: 8px 12px; }
+.category-drill article { padding: 8px 0; border-bottom: 1px solid #43564a; overflow-wrap: anywhere; }
+.category-drill article p { margin: 4px 0; }

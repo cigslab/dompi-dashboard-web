@@ -1,3 +1,4 @@
+from category_resolver import category_sql, RESOLVER_VERSION
 import os
 from rupiah import parse_idr_amount, IDR_ONLY_MESSAGE
 import hashlib
@@ -458,9 +459,9 @@ def categories():
         cursor = conn.cursor()
 
         cursor.execute(
-            """
+            f"""
             SELECT
-                COALESCE(analytics_category, 'Lainnya') AS category,
+                {category_sql()} AS category,
                 SUM(amount) AS total
 
             FROM expenses
@@ -468,7 +469,7 @@ def categories():
             WHERE user_id = %s AND currency = 'IDR'
             AND type = 'expense'
 
-            GROUP BY COALESCE(analytics_category, 'Lainnya')
+            GROUP BY {category_sql()}
             ORDER BY total DESC
             """,
             (user_id,)
@@ -510,13 +511,13 @@ def category_breakdown():
         conn = get_connection()
         cursor = conn.cursor()
         cursor.execute(
-            """
-            SELECT COALESCE(analytics_category, 'Lainnya') AS category,
+            f"""
+            SELECT {category_sql()} AS category,
                    COUNT(*) AS transaction_count, SUM(amount) AS total
             FROM expenses
             WHERE user_id = %s AND currency = 'IDR' AND type = 'expense'
               AND date LIKE %s
-            GROUP BY COALESCE(analytics_category, 'Lainnya')
+            GROUP BY {category_sql()}
             ORDER BY total DESC, category ASC
             """,
             (g.user_id, month + '-%' if month else '%'),
@@ -570,9 +571,9 @@ def reports():
         conn = get_connection()
         cursor = conn.cursor()
         cursor.execute(
-            """
+            f"""
             WITH selected AS (
-                SELECT type, COALESCE(analytics_category, 'Lainnya') AS category,
+                SELECT type, {category_sql()} AS category,
                        amount,
                        CASE WHEN LEFT(date, 10) >= %s THEN 'current' ELSE 'previous' END AS period
                 FROM expenses
@@ -880,6 +881,56 @@ def update_transaction(transaction_id):
 def health():
     return jsonify(ok=True), 200
 
+
+@app.route('/api/categories/transactions')
+def category_transactions():
+    category = request.args.get('category', '')
+    kind = request.args.get('type', '')
+    month = request.args.get('month', '')
+    start, end = request.args.get('start', ''), request.args.get('end', '')
+    try:
+        if not category or len(category) > 200 or kind not in ('expense', 'income'):
+            raise ValueError()
+        page_text = request.args.get('page', '1')
+        if not re.fullmatch(r'[1-9][0-9]{0,5}', page_text):
+            raise ValueError()
+        page = int(page_text)
+        if month and (start or end):
+            raise ValueError()
+        if month and not re.fullmatch(r'[0-9]{4}-(?:0[1-9]|1[0-2])', month):
+            raise ValueError()
+        if start or end:
+            if not all(re.fullmatch(r'[0-9]{4}-[0-9]{2}-[0-9]{2}', v) for v in (start, end)):
+                raise ValueError()
+            if date.fromisoformat(start) > date.fromisoformat(end):
+                raise ValueError()
+    except ValueError:
+        return jsonify(error='Filter kategori tidak valid'), 400
+    conn = cursor = None
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        where = f"user_id = %s AND currency = 'IDR' AND type = %s AND ({category_sql()}) = %s"
+        params = [g.user_id, kind, category]
+        if month:
+            where += ' AND date LIKE %s'
+            params.append(month + '-%')
+        if start:
+            where += ' AND LEFT(date, 10) BETWEEN %s AND %s'
+            params.extend([start, end])
+        cursor.execute(f"SELECT transaction_id, category, date, amount, note, {category_sql()} FROM expenses WHERE {where} ORDER BY date DESC, id DESC LIMIT %s OFFSET %s", tuple(params + [26, (page - 1) * 25]))
+        rows = cursor.fetchall()
+        return jsonify(items=[dict(transaction_id=r[0], description=r[1], date=r[2],
+                            amount=integer_amount(r[3]), note=r[4], category=r[5]) for r in rows[:25]],
+                       page=page, has_more=len(rows) > 25, resolver_version=RESOLVER_VERSION)
+    except Exception:
+        app.logger.exception('Category transactions failed')
+        return jsonify(error='Gagal memuat transaksi kategori'), 500
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
 
 if __name__ == "__main__":
     from waitress import serve

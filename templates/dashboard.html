@@ -984,7 +984,8 @@ async function loadCategories() {
 
             if (otherTotal > 0) {
                 donutData.push({
-                    category: "Lainnya",
+                    category: "Kategori lain",
+                    bucket_id: "__remaining__",
                     total: otherTotal
                 });
             }

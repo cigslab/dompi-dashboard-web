@@ -1,5 +1,72 @@
 (() => {
 let monthlyRequest = 0;
+
+function openCategoryTransactions(category, period) {
+    const dialog = document.createElement('dialog');
+    dialog.className = 'category-drill';
+    const title = document.createElement('h2');
+    title.id = 'categoryDrillTitle';
+    title.textContent = category;
+    dialog.setAttribute('aria-labelledby', title.id);
+    const close = document.createElement('button');
+    close.type = 'button';
+    close.textContent = 'Tutup';
+    const status = document.createElement('p');
+    status.setAttribute('role', 'status');
+    const list = document.createElement('div');
+    const previous = document.createElement('button');
+    previous.textContent = 'Sebelumnya';
+    const next = document.createElement('button');
+    next.textContent = 'Berikutnya';
+    const retry = document.createElement('button');
+    retry.textContent = 'Coba lagi';
+    for (const button of [previous, next, retry]) button.type = 'button';
+    let page = 1;
+    let request = 0;
+    let closed = false;
+    dialog.addEventListener('close', () => { closed = true; ++request; dialog.remove(); });
+    close.addEventListener('click', () => dialog.close());
+    async function load(target) {
+        const current = ++request;
+        previous.disabled = next.disabled = true;
+        retry.hidden = true;
+        list.replaceChildren();
+        status.textContent = 'Memuat transaksi…';
+        try {
+            const query = new URLSearchParams({...period, category, type: 'expense', page: String(target)});
+            const response = await apiFetch('/api/categories/transactions?' + query);
+            if (!response.ok) throw new Error('Drill-down failed');
+            const data = await response.json();
+            if (closed || current !== request) return;
+            page = target;
+            for (const item of data.items) {
+                const row = document.createElement('article');
+                for (const value of [item.description || '—', item.date, formatRupiah(item.amount), item.note || '—', item.category]) {
+                    const text = document.createElement('p');
+                    text.textContent = value;
+                    row.append(text);
+                }
+                list.append(row);
+            }
+            status.textContent = data.items.length ? `Halaman ${page}` : 'Tidak ada transaksi pada halaman ini.';
+            previous.disabled = page <= 1;
+            next.disabled = !data.has_more;
+        } catch (error) {
+            if (closed || current !== request) return;
+            status.textContent = 'Gagal memuat transaksi. Silakan coba lagi.';
+            retry.hidden = false;
+            retry.onclick = () => load(target);
+            previous.disabled = page <= 1;
+        }
+    }
+    previous.addEventListener('click', () => load(page - 1));
+    next.addEventListener('click', () => load(page + 1));
+    dialog.append(title, close, status, list, previous, next, retry);
+    document.body.append(dialog);
+    dialog.showModal();
+    load(1);
+}
+
                 function shiftMonth(monthKey, offset) {
                     const [year, month] = monthKey.split("-").map(Number);
 
@@ -386,8 +453,10 @@ function setupCategoryBreakdown() {
             const stops = [];
             data.categories.forEach((item, index) => {
                 const color = colors[index % colors.length];
-                const row = document.createElement('div');
-                row.className = 'categories-row';
+                const row = document.createElement('button');
+                row.type = 'button';
+                row.className = 'categories-row category-drill-trigger';
+                row.addEventListener('click', () => openCategoryTransactions(item.category, {month: month.value}));
                 const dot = document.createElement('span');
                 dot.className = 'categories-dot';
                 dot.style.backgroundColor = color;
@@ -478,8 +547,10 @@ function setupPeriodReport() {
             const list = document.getElementById('reportsCategories');
             list.replaceChildren();
             data.categories.forEach(item => {
-                const row = document.createElement('div');
-                row.className = 'reports-category-row';
+                const row = document.createElement('button');
+                row.type = 'button';
+                row.className = 'reports-category-row category-drill-trigger';
+                row.addEventListener('click', () => openCategoryTransactions(item.category, {start: data.start, end: data.end}));
                 const name = document.createElement('strong');
                 name.textContent = item.category;
                 const total = document.createElement('strong');
