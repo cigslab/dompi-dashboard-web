@@ -381,25 +381,25 @@ class DashboardAuthTests(unittest.TestCase):
         self.db.commit()
         self.assertIsNone(self.request('GET', '/api/account', signed()).json['plan'])
 
-    def test_profile_user_a_uses_database_name(self):
+    def test_profile_user_a_syncs_verified_name(self):
         response = self.request('GET', '/api/profile?user_id=202', signed(), json={'user_id': 202})
-        self.assertEqual(response.json, {'display_name': 'Nama A', 'username': 'user_a'})
+        self.assertEqual(response.json, {'display_name': 'Cigs & café + /', 'username': 'user_a'})
         self.assertEqual(response.headers['Cache-Control'], 'no-store')
 
-    def test_profile_user_b_uses_database_name(self):
+    def test_profile_user_b_syncs_verified_name(self):
         self.assertEqual(self.request('GET', '/api/profile', signed(202)).json,
-                         {'display_name': 'Nama B', 'username': 'user_b'})
+                         {'display_name': 'Cigs & café + /', 'username': 'user_b'})
 
     def test_profile_falls_back_to_username(self):
         self.db.execute("UPDATE users SET first_name='  ' WHERE telegram_id=101")
         self.db.commit()
-        self.assertEqual(self.request('GET', '/api/profile', signed()).json,
+        self.assertEqual(self.request('GET', '/api/profile', signed(user=json.dumps({'id':101,'first_name':' '}))).json,
                          {'display_name': 'user_a', 'username': 'user_a'})
 
     def test_profile_falls_back_to_user(self):
         self.db.execute("UPDATE users SET first_name=NULL, username=NULL WHERE telegram_id=101")
         self.db.commit()
-        self.assertEqual(self.request('GET', '/api/profile', signed()).json,
+        self.assertEqual(self.request('GET', '/api/profile', signed(user=json.dumps({'id':101,'first_name':' '}))).json,
                          {'display_name': 'User', 'username': None})
         self.assertEqual(self.request('GET', '/api/profile', signed(303)).json,
                          {'display_name': 'User', 'username': None})

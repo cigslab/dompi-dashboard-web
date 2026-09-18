@@ -59,8 +59,8 @@ class InvalidTelegramAuth(ValueError):
     pass
 
 
-def verify_telegram_init_data(init_data):
-    """Validate Telegram Mini App HMAC, then return its authenticated user ID.
+def verify_telegram_init_data(init_data, *, include_user=False):
+    """Validate Telegram Mini App HMAC/age, then return the ID or verified user.
 
     https://core.telegram.org/bots/webapps#validating-data-received-via-the-mini-app
     """
@@ -103,7 +103,7 @@ def verify_telegram_init_data(init_data):
         user_id = user.get("id")
         if type(user_id) is not int or user_id <= 0:
             raise ValueError("invalid user ID")
-        return user_id
+        return user if include_user else user_id
     except (ValueError, KeyError, TypeError, OverflowError, RecursionError):
         # Do not expose or log the incoming credentials.
         raise InvalidTelegramAuth("Invalid Telegram authentication") from None
@@ -120,7 +120,8 @@ def authenticate_dashboard():
     if scheme != "tma" or not init_data:
         return jsonify(error="unauthorized"), 401
     try:
-        g.user_id = verify_telegram_init_data(init_data)
+        g.telegram_user = verify_telegram_init_data(init_data, include_user=True)
+        g.user_id = g.telegram_user["id"]
     except InvalidTelegramAuth:
         return jsonify(error="unauthorized"), 401
     # Query-string/body user_id is deliberately never used for authentication.
@@ -182,6 +183,14 @@ def profile():
     try:
         conn = get_connection()
         cursor = conn.cursor()
+        # Only the user object returned by server-side HMAC/age verification
+        # may supply identity updates. Never create users or touch account state.
+        name = g.telegram_user.get('first_name')
+        if isinstance(name, str) and name.strip() and len(name) <= 256 and not any(ord(c) < 32 or ord(c) == 127 for c in name):
+            name = name.strip()
+            cursor.execute("UPDATE users SET first_name = %s WHERE telegram_id = %s AND (first_name IS NULL OR first_name <> %s)", (name, g.user_id, name))
+            if cursor.rowcount:
+                conn.commit()
         cursor.execute(
             "SELECT first_name, username FROM users WHERE telegram_id = %s",
             (g.user_id,),
@@ -195,6 +204,8 @@ def profile():
         username = row[1].strip() if row and isinstance(row[1], str) and row[1].strip() else None
         return jsonify(display_name=display_name, username=username)
     except Exception:
+        if conn:
+            conn.rollback()
         app.logger.exception("Profile query failed")
         return jsonify(error="Gagal mengambil profil"), 500
     finally:

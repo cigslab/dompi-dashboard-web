@@ -84,7 +84,6 @@ body {
     color: #75ef98;
 }
 
-
 /* MAIN */
 
 .main-content {
@@ -115,51 +114,6 @@ body {
     color: #9da5a1;
 }
 
-.profile {
-    display: flex;
-    align-items: center;
-}
-.profile-button {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-
-    background: transparent;
-    border: none;
-    padding: 6px 8px;
-
-    color: #ffffff;
-    cursor: pointer;
-
-    border-radius: 12px;
-}
-
-.profile-button:hover {
-    background: #151b19;
-}
-
-.profile-info {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 2px;
-}
-
-.profile-info strong {
-    font-size: 15px;
-    font-weight: 600;
-}
-
-.profile-info span {
-    font-size: 12px;
-    color: #67e58a;
-}
-
-.profile-arrow {
-    color: #8f9894;
-    font-size: 16px;
-}
-
 .avatar {
     width: 38px;
     height: 38px;
@@ -176,54 +130,7 @@ body {
     font-size: 14px;
     font-weight: 600;
 }
-.profile {
-    position: relative;
-}
 
-.profile-dropdown {
-    position: absolute;
-    top: calc(100% + 10px);
-    right: 0;
-
-    min-width: 90px;
-
-    background: #151b19;
-    border: 1px solid #252d2a;
-    border-radius: 12px;
-
-    padding: 8px;
-
-    display: none;
-
-    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.28);
-
-    z-index: 1000;
-}
-
-.profile-dropdown.active {
-    display: block;
-}
-
-.logout-button {
-    width: 100%;
-
-    background: transparent;
-    border: none;
-
-    color: #ff6b6b;
-    text-align: left;
-
-    padding: 11px 12px;
-
-    border-radius: 8px;
-
-    font-size: 14px;
-    cursor: pointer;
-}
-
-.logout-button:hover {
-    background: rgba(255, 107, 107, 0.08);
-}
 /* SUMMARY */
 
 .summary-grid {
@@ -1811,9 +1718,7 @@ body {
     .main-content { width: 100%; padding: 20px; }
     .topbar, .page-header { flex-direction: row; gap: 12px; align-items: flex-start; }
     .topbar > div:first-child, .page-header > div:first-child { min-width: 0; }
-    .profile { flex-shrink: 0; }
-    .profile-button { padding: 8px; gap: 6px; min-height: 44px; }
-    .profile-info { display: none; }
+
     .summary-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     .summary-card { flex-wrap: wrap; padding: 16px; }
     .summary-card h2 { font-size: 22px; overflow-wrap: anywhere; }
@@ -2000,3 +1905,6 @@ body {
 .category-review-badge { display: block; width: 100%; max-width: 100%; box-sizing: border-box; white-space: normal; overflow-wrap: anywhere; padding: 12px; margin: 8px 0; border: 1px solid #d6ac59; border-radius: 10px; color: #ffe1a1; background: #332d1e; text-align: left; min-height: 44px; }
 .category-drill { box-sizing: border-box; max-width: calc(100vw - 24px); }
 .category-drill article, .category-drill button { max-width: 100%; overflow-wrap: anywhere; white-space: normal; }
+
+/* Headers use Akun as the sole account entry point. */
+#overviewPage .topbar > div, #transactionPage .topbar > div { min-width: 0; width: 100%; overflow-wrap: anywhere; }

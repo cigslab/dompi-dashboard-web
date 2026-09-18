@@ -88,26 +88,6 @@
                     </p>
                 </div>
 
-                <div class="profile">
-
-                    <button class="profile-button" id="profileButton">
-                        <div class="avatar" data-profile-avatar>U</div>
-
-                        <div class="profile-info">
-                            <strong data-display-name>User</strong>
-
-                        </div>
-
-                        <span class="profile-arrow">⌄</span>
-                    </button>
-
-                    <div class="profile-dropdown" id="profileDropdown">
-                        <button class="logout-button" id="logoutButton">
-                            Keluar
-                        </button>
-                    </div>
-
-                </div>
             </header>
 
             <section class="summary-grid">
@@ -238,26 +218,6 @@
                         </p>
                     </div>
 
-                    <div class="profile">
-
-                        <button class="profile-button" id="transactionProfileButton">
-                            <div class="avatar" data-profile-avatar>U</div>
-
-                            <div class="profile-info">
-                                <strong data-display-name>User</strong>
-
-                            </div>
-
-                            <span class="profile-arrow">⌄</span>
-                        </button>
-
-                        <div class="profile-dropdown" id="transactionProfileDropdown">
-                            <button class="logout-button">
-                                Keluar dari Dashboard
-                            </button>
-                        </div>
-
-                    </div>
                 </header>
                 </p>
                 <div class="transaction-toolbar">
@@ -2038,47 +1998,6 @@ dateRangeButton.addEventListener("click", function (e) {
     dateRangePopover.hidden =
         !dateRangePopover.hidden;
 });
-// ==============================
-// PROFILE DROPDOWN - OVERVIEW
-// ==============================
-
-const profileButton =
-    document.getElementById("profileButton");
-
-const profileDropdown =
-    document.getElementById("profileDropdown");
-
-profileButton.addEventListener("click", function (e) {
-    e.stopPropagation();
-
-    profileDropdown.classList.toggle("active");
-});
-
-document.addEventListener("click", function () {
-    profileDropdown.classList.remove("active");
-});
-
-
-// ==============================
-// PROFILE DROPDOWN - TRANSAKSI
-// ==============================
-
-const transactionProfileButton =
-    document.getElementById("transactionProfileButton");
-
-const transactionProfileDropdown =
-    document.getElementById("transactionProfileDropdown");
-
-transactionProfileButton.addEventListener("click", function (e) {
-    e.stopPropagation();
-
-    transactionProfileDropdown.classList.toggle("active");
-});
-
-document.addEventListener("click", function () {
-    transactionProfileDropdown.classList.remove("active");
-});
-
 </script>
 <script src="/static/analytics.js"></script>
 <script src="/static/navigation.js"></script>

@@ -575,9 +575,6 @@ function setupPeriodReport() {
             const list = document.getElementById('reportsCategories');
             list.replaceChildren();
             const ordinaryReportTotal = data.categories.filter(item => item.category !== 'Perlu ditinjau').reduce((sum, item) => sum + Number(item.total), 0);
-            const categoryNote = document.createElement('p');
-            categoryNote.textContent = 'Persentase kategori tidak mencakup Perlu ditinjau. Nilai Perlu ditinjau dapat mencakup label historical yang tidak sesuai jenis; klik membuka transaksi dengan penanda review setelah edit.';
-            list.append(categoryNote);
             [...data.categories].sort((a, b) => Number(b.category === 'Perlu ditinjau') - Number(a.category === 'Perlu ditinjau')).forEach(item => {
                 const row = document.createElement('button');
                 row.type = 'button';
