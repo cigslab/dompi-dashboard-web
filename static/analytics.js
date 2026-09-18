@@ -1,7 +1,7 @@
 (() => {
 let monthlyRequest = 0;
 
-function openCategoryTransactions(category, period) {
+function openCategoryTransactions(category, period, kind = 'expense') {
     const dialog = document.createElement('dialog');
     dialog.className = 'category-drill';
     const title = document.createElement('h2');
@@ -33,7 +33,7 @@ function openCategoryTransactions(category, period) {
         list.replaceChildren();
         status.textContent = 'Memuat transaksi…';
         try {
-            const query = new URLSearchParams({...period, category, type: 'expense', page: String(target)});
+            const query = new URLSearchParams({...period, category, type: kind, page: String(target)});
             const response = await apiFetch('/api/categories/transactions?' + query);
             if (!response.ok) throw new Error('Drill-down failed');
             const data = await response.json();
@@ -46,6 +46,14 @@ function openCategoryTransactions(category, period) {
                     text.textContent = value;
                     row.append(text);
                 }
+                const edit = document.createElement('button');
+                edit.type = 'button';
+                edit.textContent = 'Edit transaksi';
+                edit.addEventListener('click', () => {
+                    dialog.close();
+                    openTransactionEditor({...item, type: item.type || kind});
+                });
+                row.append(edit);
                 list.append(row);
             }
             status.textContent = data.items.length ? `Halaman ${page}` : 'Tidak ada transaksi pada halaman ini.';
@@ -428,6 +436,9 @@ function setupCategoryBreakdown() {
     const month = document.getElementById('analyticsCategoryMonth');
     const status = document.getElementById('categoriesStatus');
     const content = document.getElementById('categoriesContent');
+    const attention = document.createElement('section');
+    attention.className = 'category-review-attention';
+    content.before(attention);
     const colors = ['#67e58a', '#77b9a4', '#719aa8', '#b1bb7b', '#ad92b5', '#d3a578'];
     let requestNumber = 0;
     const retry = document.getElementById('categoriesRetry');
@@ -437,21 +448,38 @@ function setupCategoryBreakdown() {
         const current = ++requestNumber;
         content.hidden = true;
         retry.hidden = true;
+        attention.replaceChildren();
         status.textContent = 'Memuat kategori…';
         try {
             const response = await apiFetch('/api/categories/breakdown?month=' + encodeURIComponent(month.value));
             if (!response.ok) throw new Error('Category request failed');
             const data = await response.json();
+            const reviewResponse = await apiFetch('/api/categories/review?month=' + encodeURIComponent(month.value));
+            if (!reviewResponse.ok) throw new Error('Review request failed');
+            const reviews = await reviewResponse.json();
             if (current !== requestNumber) return;
+            for (const item of reviews.items) {
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = 'category-review-badge';
+                button.textContent = `Perlu ditinjau · ${item.count} ${item.type === 'income' ? 'pemasukan' : 'pengeluaran'} · ${formatRupiah(item.total)}`;
+                button.addEventListener('click', () => openCategoryTransactions('Perlu ditinjau', {month: month.value, review: '1'}, item.type));
+                attention.append(button);
+            }
+            const ordinary = data.categories.filter(item => item.category !== 'Perlu ditinjau');
+            const ordinaryTotal = ordinary.reduce((sum, item) => sum + Number(item.total), 0);
+            const explanation = document.createElement('p');
+            explanation.textContent = 'Donut dan persentase hanya mencakup kategori biasa. Perlu ditinjau tidak termasuk; total pengeluaran tetap mencakup semuanya.';
+            attention.append(explanation);
             document.getElementById('categoriesTotal').textContent = formatRupiah(data.total_expense);
-            document.getElementById('categoriesCount').textContent = data.category_count;
-            document.getElementById('categoriesLargest').textContent = data.largest_category || '—';
-            document.getElementById('categoriesDonutTotal').textContent = formatRupiah(data.total_expense);
+            document.getElementById('categoriesCount').textContent = ordinary.length;
+            document.getElementById('categoriesLargest').textContent = ordinary[0]?.category || '—';
+            document.getElementById('categoriesDonutTotal').textContent = formatRupiah(ordinaryTotal);
             const list = document.getElementById('categoriesList');
             list.replaceChildren();
             let cumulative = 0;
             const stops = [];
-            data.categories.forEach((item, index) => {
+            ordinary.forEach((item, index) => {
                 const color = colors[index % colors.length];
                 const row = document.createElement('button');
                 row.type = 'button';
@@ -471,17 +499,17 @@ function setupCategoryBreakdown() {
                 amount.textContent = formatRupiah(item.total);
                 const percent = document.createElement('span');
                 percent.className = 'categories-meta categories-percent';
-                percent.textContent = `${Number(item.percentage).toLocaleString('id-ID', {maximumFractionDigits: 2})}%`;
+                percent.textContent = `${(ordinaryTotal ? Number(item.total) / ordinaryTotal * 100 : 0).toLocaleString('id-ID', {maximumFractionDigits: 2})}%`;
                 row.append(dot, name, count, amount, percent);
                 list.appendChild(row);
-                const share = data.total_expense > 0 ? Number(item.total) / Number(data.total_expense) * 100 : 0;
+                const share = ordinaryTotal > 0 ? Number(item.total) / ordinaryTotal * 100 : 0;
                 const end = cumulative + share;
                 stops.push(`${color} ${cumulative}% ${end}%`);
                 cumulative = end;
             });
             const donut = document.getElementById('categoriesDonut');
             donut.style.background = stops.length ? `conic-gradient(${stops.join(',')})` : '#26302c';
-            donut.setAttribute('aria-label', `Distribusi ${data.category_count} kategori. Total ${formatRupiah(data.total_expense)}. Rincian tersedia pada daftar kategori.`);
+            donut.setAttribute('aria-label', `Distribusi ${ordinary.length} kategori biasa. Total ${formatRupiah(ordinaryTotal)}. Rincian tersedia pada daftar kategori.`);
             status.textContent = data.categories.length ? '' : 'Belum ada pengeluaran pada periode ini.';
             content.hidden = false;
         } catch (error) {
@@ -546,18 +574,23 @@ function setupPeriodReport() {
             text('reportsComparisonPeriod',`Pembanding: ${range(comparison.start,comparison.end)} (${data.days} hari), pengeluaran ${formatRupiah(comparison.expense)}.`);
             const list = document.getElementById('reportsCategories');
             list.replaceChildren();
-            data.categories.forEach(item => {
+            const ordinaryReportTotal = data.categories.filter(item => item.category !== 'Perlu ditinjau').reduce((sum, item) => sum + Number(item.total), 0);
+            const categoryNote = document.createElement('p');
+            categoryNote.textContent = 'Persentase kategori tidak mencakup Perlu ditinjau. Nilai Perlu ditinjau dapat mencakup label historical yang tidak sesuai jenis; klik membuka transaksi dengan penanda review setelah edit.';
+            list.append(categoryNote);
+            [...data.categories].sort((a, b) => Number(b.category === 'Perlu ditinjau') - Number(a.category === 'Perlu ditinjau')).forEach(item => {
                 const row = document.createElement('button');
                 row.type = 'button';
                 row.className = 'reports-category-row category-drill-trigger';
-                row.addEventListener('click', () => openCategoryTransactions(item.category, {start: data.start, end: data.end}));
+                row.addEventListener('click', () => openCategoryTransactions(item.category, {start: data.start, end: data.end, ...(item.category === 'Perlu ditinjau' ? {review: '1'} : {})}));
+                if (item.category === 'Perlu ditinjau') row.classList.add('category-review-badge');
                 const name = document.createElement('strong');
                 name.textContent = item.category;
                 const total = document.createElement('strong');
                 total.className = 'reports-category-amount';
                 total.textContent = formatRupiah(item.total);
                 const percentage = document.createElement('span');
-                percentage.textContent = number(item.percentage) + '%';
+                percentage.textContent = item.category === 'Perlu ditinjau' ? 'Perlu pemeriksaan' : number(ordinaryReportTotal ? Number(item.total) / ordinaryReportTotal * 100 : 0) + '%';
                 row.append(name,total,percentage);
                 list.appendChild(row);
             });

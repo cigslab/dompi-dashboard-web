@@ -1995,3 +1995,8 @@ body {
 .category-drill button { min-height: 44px; margin: 4px; padding: 8px 12px; }
 .category-drill article { padding: 8px 0; border-bottom: 1px solid #43564a; overflow-wrap: anywhere; }
 .category-drill article p { margin: 4px 0; }
+
+.category-review-attention { margin: 12px 0; min-width: 0; }
+.category-review-badge { display: block; width: 100%; max-width: 100%; box-sizing: border-box; white-space: normal; overflow-wrap: anywhere; padding: 12px; margin: 8px 0; border: 1px solid #d6ac59; border-radius: 10px; color: #ffe1a1; background: #332d1e; text-align: left; min-height: 44px; }
+.category-drill { box-sizing: border-box; max-width: calc(100vw - 24px); }
+.category-drill article, .category-drill button { max-width: 100%; overflow-wrap: anywhere; white-space: normal; }

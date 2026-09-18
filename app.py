@@ -915,6 +915,9 @@ def category_transactions():
         cursor = conn.cursor()
         where = f"user_id = %s AND currency = 'IDR' AND type = %s AND ({category_sql()}) = %s"
         params = [g.user_id, kind, category]
+        if request.args.get('review') == '1':
+            where += ' AND analytics_category = %s'
+            params.append(REVIEW_MARKER)
         if month:
             where += ' AND date LIKE %s'
             params.append(month + '-%')
@@ -924,7 +927,7 @@ def category_transactions():
         cursor.execute(f"SELECT transaction_id, category, date, amount, note, {category_sql()} FROM expenses WHERE {where} ORDER BY date DESC, id DESC LIMIT %s OFFSET %s", tuple(params + [26, (page - 1) * 25]))
         rows = cursor.fetchall()
         return jsonify(items=[dict(transaction_id=r[0], description=r[1], date=r[2],
-                            amount=integer_amount(r[3]), note=r[4], category=r[5]) for r in rows[:25]],
+                            amount=integer_amount(r[3]), note=r[4], category=r[5], type=kind) for r in rows[:25]],
                        page=page, has_more=len(rows) > 25, resolver_version=RESOLVER_VERSION)
     except Exception:
         app.logger.exception('Category transactions failed')
@@ -934,6 +937,27 @@ def category_transactions():
             cursor.close()
         if conn:
             conn.close()
+
+@app.route('/api/categories/review')
+def category_review():
+    month = request.args.get('month', '')
+    if month and not re.fullmatch(r'[0-9]{4}-(?:0[1-9]|1[0-2])', month):
+        return jsonify(error='Periode tidak valid'), 400
+    conn = cursor = None
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT type, COUNT(*), SUM(amount) FROM expenses WHERE user_id = %s AND currency = 'IDR' AND analytics_category = %s AND type IN ('expense', 'income') AND date LIKE %s GROUP BY type", (g.user_id, REVIEW_MARKER, month + '-%' if month else '%'))
+        return jsonify(items=[dict(type=r[0], count=r[1], total=integer_amount(r[2])) for r in cursor.fetchall()])
+    except Exception:
+        app.logger.exception('Review summary failed')
+        return jsonify(error='Gagal memuat perhatian kategori'), 500
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
+
 
 if __name__ == "__main__":
     from waitress import serve

@@ -1498,6 +1498,15 @@ document.addEventListener("click", async (event) => {
     }
 });
 let editingTransactionId = null;
+function openTransactionEditor(item) {
+    editingTransactionId = item.transaction_id;
+    document.getElementById('editTransactionCategory').value = item.description || '';
+    document.getElementById('editTransactionAmount').value = item.amount;
+    document.getElementById('editTransactionNote').value = item.note === '-' ? '' : (item.note || '');
+    document.getElementById('editTransactionType').value = item.type;
+    document.getElementById('editTransactionModal').classList.remove('hidden');
+}
+
 
 document.addEventListener("click", (event) => {
     const editButton =
