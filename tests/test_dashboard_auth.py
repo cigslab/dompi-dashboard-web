@@ -364,7 +364,7 @@ class DashboardAuthTests(unittest.TestCase):
         self.db.executemany('INSERT INTO monthly_usage VALUES (?,?,?)', [(101, month, 37), (202, month, 99), (101, '2000-01', 88)])
         self.db.commit()
         response = self.request('GET', '/api/account?user_id=202', signed(), json={'user_id': 202})
-        self.assertEqual(response.json, dict(plan='free', monthly_usage=37, usage_month=month, free_monthly_limit=None, joined_at='2025-01-02'))
+        self.assertEqual({k: v for k, v in response.json.items() if k != 'entitlement'}, dict(plan='free', monthly_usage=37, usage_month=month, free_monthly_limit=None, joined_at='2025-01-02'))
         self.assertEqual(response.headers['Cache-Control'], 'no-store')
         self.assertEqual(self.db.execute('SELECT plan FROM users WHERE telegram_id=101').fetchone()[0], 'pro')
 

@@ -1,3 +1,4 @@
+from entitlement_reader import read_entitlement, entitlement_status
 from category_resolver import category_sql, RESOLVER_VERSION, REVIEW_MARKER
 import os
 from rupiah import parse_idr_amount, IDR_ONLY_MESSAGE
@@ -239,6 +240,9 @@ def account():
         if not row:
             return jsonify(error="Akun belum tersedia"), 404
         plan, pro_until, joined_at = row
+        observed = entitlement_status(read_entitlement(
+            cursor, g.user_id, now=now, dialect='postgresql'))
+        # Keep legacy UI fields stable; new callers opt into entitlement status.
         plan = plan if plan in ("free", "pro") else None
         if plan == "pro" and pro_until:
             try:
@@ -256,7 +260,7 @@ def account():
             joined_at = datetime.strptime(str(joined_at), "%Y-%m-%d %H:%M:%S").strftime("%Y-%m-%d") if joined_at else None
         except ValueError:
             joined_at = None
-        return jsonify(plan=plan, monthly_usage=usage, usage_month=month,
+        return jsonify(entitlement=observed, plan=plan, monthly_usage=usage, usage_month=month,
                        free_monthly_limit=configured_free_monthly_limit(), joined_at=joined_at)
     except Exception:
         app.logger.exception("Account query failed")
