@@ -21,7 +21,7 @@ class CategoryTests(unittest.TestCase):
         for old,new in [('Tagihan','Tagihan & Utilitas'),('Hiburan','Hiburan & Lifestyle'),('Keuangan','Keuangan & Cicilan'),('Lainnya','Lainnya'),('Food','Food'),('Makan & Minum','Makan & Minum')]:
             self.assertEqual(resolve_category(old,'expense'),new)
             self.assertEqual(resolve_category(new,'expense'),new)
-        self.assertEqual(resolve_category('Tagihan','income'),'Tagihan')
+        self.assertEqual(resolve_category('Tagihan','income'),'Perlu ditinjau')
 
     def test_aggregates_and_no_rewrite(self):
         self.seed()
@@ -53,7 +53,7 @@ class CategoryTests(unittest.TestCase):
             self.assertEqual(self.request('GET',path,auth).status_code,401)
         ranged='/api/categories/transactions?'+urlencode({'category':'Tagihan & Utilitas','type':'expense','start':'2026-08-01','end':'2026-08-31'})
         self.assertEqual(self.request('GET',ranged,signed()).json['items'][0]['description'],'old')
-        income='/api/categories/transactions?'+urlencode({'category':'Tagihan','type':'income','month':'2026-09'})
+        income='/api/categories/transactions?'+urlencode({'category':'Perlu ditinjau','type':'income','month':'2026-09'})
         self.assertEqual(len(self.request('GET',income,signed()).json['items']),1)
         for extra in ['&page=0','&month=bad','&type=transfer','&start=bad']:
             # Replace existing values rather than append duplicate arguments.

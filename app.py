@@ -1,4 +1,4 @@
-from category_resolver import category_sql, RESOLVER_VERSION
+from category_resolver import category_sql, RESOLVER_VERSION, REVIEW_MARKER
 import os
 from rupiah import parse_idr_amount, IDR_ONLY_MESSAGE
 import hashlib
@@ -804,47 +804,50 @@ def update_transaction(transaction_id):
         if not isinstance(data, dict):
             return {"success": False, "message": "Data transaksi tidak valid."}, 400
 
-        category = data.get("category")
-        amount = data.get("amount")
-        note = data.get("note")
-        transaction_type = data.get("type")
+        fields = {key: data[key] for key in ('category', 'amount', 'note', 'type', 'date') if key in data}
+        if not fields:
+            return jsonify(success=False, message='Tidak ada perubahan transaksi.'), 400
+        if 'category' in fields and (not isinstance(fields['category'], str) or not fields['category'].strip()):
+            return jsonify(success=False, message='Deskripsi transaksi tidak valid.'), 400
+        if 'note' in fields and fields['note'] is not None and not isinstance(fields['note'], str):
+            return jsonify(success=False, message='Catatan tidak valid.'), 400
+        if 'type' in fields and fields['type'] not in ('expense', 'income'):
+            return jsonify(success=False, message='Jenis transaksi tidak valid.'), 400
+        if 'date' in fields:
+            try:
+                if not isinstance(fields['date'], str) or not re.fullmatch(r'[0-9]{4}-[0-9]{2}-[0-9]{2}', fields['date']):
+                    raise ValueError()
+                date.fromisoformat(fields['date'])
+            except ValueError:
+                return jsonify(success=False, message='Tanggal tidak valid.'), 400
+        currency = data.get('currency', 'IDR')
+        if not isinstance(currency, str) or currency.strip().upper() not in {'IDR', 'RP'}:
+            return jsonify(success=False, message=IDR_ONLY_MESSAGE), 400
+        if 'amount' in fields:
+            fields['amount'] = parse_idr_amount(fields['amount'])
+            if fields['amount'] is None:
+                return jsonify(success=False, message='Nominal harus Rupiah bulat positif.'), 400
 
-        if not category or amount is None or not transaction_type:
-            return {
-                "success": False,
-                "message": "Data transaksi tidak lengkap."
-            }, 400
-
-        currency = data.get("currency", "IDR")
-        if not isinstance(currency, str) or currency.strip().upper() not in {"IDR", "RP"}:
-            return {"success": False, "message": IDR_ONLY_MESSAGE}, 400
-        amount = parse_idr_amount(amount)
-        if amount is None:
-            return {"success": False, "message": "Nominal harus Rupiah bulat positif."}, 400
-
+        # A single UPDATE compares against the current stored context, avoiding
+        # a read/update race. Only server-selected column names enter SQL.
+        changes = []
+        params = []
+        for key in ('category', 'note', 'type'):
+            if key in fields:
+                changes.append(f"COALESCE({key}, '') <> %s")
+                params.append(fields[key] or '')
+        assignments = []
+        if changes:
+            assignments.append('analytics_category = CASE WHEN ' + ' OR '.join(changes) + ' THEN %s ELSE analytics_category END')
+            params.append(REVIEW_MARKER)
+        for key, value in fields.items():
+            assignments.append(f'{key} = %s')
+            params.append(value)
+        params.extend([user_id, transaction_id])
         conn = get_connection()
         cursor = conn.cursor()
-
-        cursor.execute(
-            """
-            UPDATE expenses
-            SET
-                category = %s,
-                amount = %s,
-                note = %s,
-                type = %s
-            WHERE user_id = %s AND currency = 'IDR'
-            AND transaction_id = %s
-            """,
-            (
-                category,
-                amount,
-                note,
-                transaction_type,
-                user_id,
-                transaction_id,
-            ),
-        )
+        cursor.execute('UPDATE expenses SET ' + ', '.join(assignments) +
+                       " WHERE user_id = %s AND currency = 'IDR' AND transaction_id = %s", tuple(params))
 
         if cursor.rowcount == 0:
             return {
