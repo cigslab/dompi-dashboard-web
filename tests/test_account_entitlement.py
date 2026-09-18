@@ -63,3 +63,14 @@ class AccountEntitlementTests(unittest.TestCase):
         with self.assertLogs(api.app.logger, level='ERROR'):
             self.assertEqual(self.request('GET', '/api/account', signed()).status_code, 500)
         self.assertEqual(self.db.execute('SELECT lifetime_plan FROM users WHERE telegram_id=101').fetchone()[0], 'invalid')
+
+    def test_account_markup_exposes_safe_feature_links_without_db(self):
+        with patch.object(api, 'get_connection') as connection:
+            response = api.app.test_client().get('/')
+            self.assertEqual(response.status_code, 200)
+            html = response.get_data(as_text=True)
+            for feature in ('Receipt', 'Export', 'Advanced'):
+                self.assertIn(f'id="account{feature}Lock" href="/upgrade"', html)
+            self.assertIn('id="accountUpgradeAction" hidden', html)
+            self.assertIn('aria-labelledby="accountFeaturesHeading" hidden', html)
+            connection.assert_not_called()

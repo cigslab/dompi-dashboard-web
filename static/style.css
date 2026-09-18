@@ -1908,3 +1908,13 @@ body {
 
 /* Headers use Akun as the sole account entry point. */
 #overviewPage .topbar > div, #transactionPage .topbar > div { min-width: 0; width: 100%; overflow-wrap: anywhere; }
+
+/* Entitlement feature rows keep locked links keyboard-accessible. */
+.account-features h2 { margin: 0 0 8px; font-size: 18px; }
+.account-features ul { list-style: none; padding: 0; margin: 0; }
+.account-features li { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px 16px; min-height: 44px; padding: 8px 0; border-bottom: 1px solid #293830; }
+.account-features li > span:first-child { flex: 1; min-width: 100px; }
+.account-features li > span:last-child { color: #a8b8af; font-size: 13px; }
+.account-features a { color: #4ade80; padding: 10px 0; font-size: 13px; overflow-wrap: anywhere; }
+.account-features a:focus-visible { outline: 2px solid #4ade80; outline-offset: 3px; }
+.account-features [hidden], #accountUpgradeAction[hidden], #accountFeatures[hidden] { display: none; }

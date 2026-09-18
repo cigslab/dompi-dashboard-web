@@ -34,7 +34,7 @@ function setup(attack) {
     window.__testCalls.push({path:pathname,query:new URL(url,location.href).search,method:options.method||'GET',body:options.body,auth:new Headers(options.headers).get('Authorization')});
     let data;
     if(pathname==='/api/profile') { if(window.__profileError) return new Response('{}',{status:500}); data={display_name:attack?payloads[0]:'Nama A',username:window.__noUsername?null:(attack?payloads[1]:'user_a')}; }
-    else if(pathname==='/api/account') { if(window.__accountError) return new Response('{}',{status:500}); data={plan:window.__unknownAccount?null:(window.__accountPlan||'free'),monthly_usage:window.__unknownAccount?null:(window.__accountUsage??37),usage_month:month,joined_at:window.__accountJoined??'2026-09-07',free_monthly_limit:window.__accountLimit??null}; }
+    else if(pathname==='/api/account') { if(window.__accountError) return new Response('{}',{status:500}); data={entitlement:window.__accountEntitlement??{effective_plan:window.__unknownAccount?null:(window.__accountPlan||'free'),entitlement_source:window.__unknownAccount?null:(window.__accountPlan==='pro'?'pro_lifetime':'free'),requires_review:!!window.__unknownAccount,lifetime:window.__accountPlan==='pro',legacy_expires_at:null},plan:window.__unknownAccount?null:(window.__accountPlan||'free'),monthly_usage:window.__unknownAccount?null:(window.__accountUsage??37),usage_month:month,joined_at:window.__accountJoined??'2026-09-07',free_monthly_limit:window.__accountLimit??null}; }
     else if(pathname==='/api/transactions/reset') { if(options.method==='DELETE') { await new Promise(r=>setTimeout(r,100)); data={success:true}; } else data={count:4,token:'test-reset-token'}; }
     else if(options.method&&options.method!=='GET') data={success:true};
     else if(pathname==='/api/categories/breakdown') {
@@ -130,6 +130,22 @@ async function runTests(index,attack){
     eq(document.querySelector('#accountQuotaProgress').hidden,true,'Pro hides Free progress');
     eq(document.querySelector('#accountQuotaRemaining').hidden,true,'Pro hides quota warning');
     eq(document.querySelector('#accountUsage').textContent,'Unlimited — pencatatan tanpa batas','Pro unlimited status');
+    window.__accountEntitlement={effective_plan:'starter',entitlement_source:'starter_lifetime',requires_review:false};
+    window.__accountUsage=149;await loadAccountUsage();
+    eq(document.querySelector('#accountPlan').textContent,'Starter Lifetime','Starter badge');
+    eq(document.querySelector('#accountUsage').textContent,'149 / 150 transaksi bulan ini','Starter quota');
+    for(const name of ['Receipt','Export','Advanced']) {
+      eq(document.querySelector('#account'+name+'Lock').hidden,false,'Starter feature lock '+name);
+      eq(document.querySelector('#account'+name+'Lock').getAttribute('href'),'/upgrade','locked feature upgrade route');
+    }
+    window.__accountEntitlement={effective_plan:'pro',entitlement_source:'pro_lifetime',requires_review:false};await loadAccountUsage();
+    eq(document.querySelector('#accountUpgradeAction').hidden,true,'Pro upgrade hidden');
+    eq(document.querySelector('#accountReceiptStatus').textContent,'Aktif','Pro receipt active');
+    eq(document.querySelector('#accountExportStatus').textContent,'Belum tersedia','export not yet available');
+    eq(document.querySelector('#accountAdvancedStatus').textContent,'Belum tersedia','advanced not yet available');
+    window.__accountEntitlement.requires_review=true;await loadAccountUsage();
+    eq(document.querySelector('#accountReceiptStatus').textContent,'Perlu ditinjau','ambiguous premium not active');
+    window.__accountEntitlement=null;
     window.__accountPlan='free';window.__accountLimit='50';await loadAccountUsage();
     eq(document.querySelector('#accountQuotaProgress').hidden,true,'invalid limit hides progress');
     window.__accountLimit=50;window.__unknownAccount=true;await loadAccountUsage();

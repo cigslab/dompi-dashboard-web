@@ -46,13 +46,22 @@
                         <p id="accountPlan" hidden></p>
                         <p id="accountJoined" class="account-caption" hidden></p>
                         <p id="accountUsage" role="status" aria-live="polite">Memuat…</p>
-                        <progress id="accountQuotaProgress" aria-label="Pemakaian kuota bulanan Free" aria-describedby="accountUsage" hidden></progress>
+                        <progress id="accountQuotaProgress" aria-label="Pemakaian kuota bulanan" aria-describedby="accountUsage" hidden></progress>
                         <p id="accountQuotaRemaining" class="account-caption" role="status" hidden></p>
                         <p id="accountQuotaNote" class="account-caption" hidden></p>
                         <button type="button" id="accountUsageRetry" class="account-retry" hidden>Coba lagi informasi akun</button>
                     </section>
+                    <section id="accountFeatures" class="panel account-features" aria-labelledby="accountFeaturesHeading" hidden>
+                        <h2 id="accountFeaturesHeading">Fitur paket</h2>
+                        <ul>
+                            <li><span>Foto Struk</span><a id="accountReceiptLock" href="/upgrade" aria-label="Foto Struk terkunci, upgrade ke Pro" hidden>Terkunci · Pro →</a><span id="accountReceiptStatus"></span></li>
+                            <li><span>Export</span><a id="accountExportLock" href="/upgrade" aria-label="Export terkunci, upgrade ke Pro" hidden>Terkunci · Pro →</a><span id="accountExportStatus"></span></li>
+                            <li><span>Analitik lanjutan</span><a id="accountAdvancedLock" href="/upgrade" aria-label="Analitik lanjutan terkunci, upgrade ke Pro" hidden>Terkunci · Pro →</a><span id="accountAdvancedStatus"></span></li>
+                        </ul>
+                        <p id="accountFeatureNote" class="account-caption"></p>
+                    </section>
                     <ul class="account-actions" aria-label="Layanan akun">
-                        <li><a href="/upgrade" class="account-action account-action-upgrade"><span>Upgrade ke Pro</span><span aria-hidden="true">→</span></a></li>
+                        <li id="accountUpgradeAction" hidden><a href="/upgrade" class="account-action account-action-upgrade"><span>Upgrade ke Pro</span><span aria-hidden="true">→</span></a></li>
                         <li><a href="/help" class="account-action"><span>Bantuan &amp; Feedback</span><span aria-hidden="true">→</span></a></li>
                         <li><a href="/privacy" class="account-action"><span>Kebijakan Privasi</span><span aria-hidden="true">→</span></a></li>
                         <li><a href="/terms" class="account-action"><span>Syarat &amp; Ketentuan</span><span aria-hidden="true">→</span></a></li>
@@ -649,6 +658,8 @@ async function loadAccountUsage() {
     const quotaNote = document.getElementById("accountQuotaNote");
     const remainingNote = document.getElementById("accountQuotaRemaining");
     remainingNote.hidden = true;
+    document.getElementById("accountFeatures").hidden = true;
+    document.getElementById("accountUpgradeAction").hidden = true;
     progress.hidden = true;
     quotaNote.hidden = true;
     document.getElementById("accountPlan").hidden = true;
@@ -660,30 +671,57 @@ async function loadAccountUsage() {
         const data = await response.json();
         if (version !== accountUsageRequest) return;
         const plan = document.getElementById("accountPlan");
-        plan.textContent = data.plan === "free" ? "Paket Free" : data.plan === "pro" ? "Paket Pro" : "";
-        plan.hidden = !plan.textContent;
+        const entitlement = data.entitlement;
+        const source = entitlement?.entitlement_source;
+        const effective = entitlement?.effective_plan;
+        const isFree = effective === "free" && source === "free";
+        const isStarter = effective === "starter" && source === "starter_lifetime";
+        const isPro = effective === "pro" && ["pro_lifetime", "pro_legacy"].includes(source);
+        const expiry = typeof entitlement?.legacy_expires_at === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(entitlement.legacy_expires_at)
+            ? formatAccountJoined(entitlement.legacy_expires_at.slice(0, 10)).replace(/^Bergabung /, "") : "";
+        const reviewed = entitlement?.requires_review !== false || !(isFree || isStarter || isPro)
+            || (source === "pro_legacy" && !expiry);
+        plan.textContent = isStarter ? "Starter Lifetime" : isPro
+            ? (source === "pro_lifetime" ? "Pro Lifetime" : expiry ? "Pro aktif sampai " + expiry : "Status paket perlu ditinjau")
+            : isFree ? "Paket Free" : "Status paket perlu ditinjau";
+        plan.hidden = false;
+        document.getElementById("accountUpgradeAction").hidden = !(isFree || isStarter);
+        document.getElementById("accountFeatures").hidden = !(isStarter || isPro || reviewed);
+        for (const feature of ["Receipt", "Export", "Advanced"]) {
+            const lock = document.getElementById("account" + feature + "Lock");
+            const status = document.getElementById("account" + feature + "Status");
+            lock.hidden = !isStarter;
+            status.hidden = isStarter;
+            status.textContent = reviewed ? "Perlu ditinjau" : feature === "Receipt" && isPro ? "Aktif" : "Belum tersedia";
+        }
+        document.getElementById("accountFeatureNote").textContent = reviewed
+            ? "Status akun perlu ditinjau. Hubungi Bantuan & Feedback."
+            : isStarter ? "Export dan analitik lanjutan belum tersedia."
+            : "Foto Struk digunakan melalui bot Telegram. Export dan analitik lanjutan belum tersedia.";
         const joined = document.getElementById("accountJoined");
         joined.textContent = formatAccountJoined(data.joined_at);
         joined.hidden = !joined.textContent;
         const validUsage = Number.isSafeInteger(data.monthly_usage) && data.monthly_usage >= 0;
-        const validLimit = Number.isSafeInteger(data.free_monthly_limit) && data.free_monthly_limit > 0;
+        // Display mirrors the approved Starter contract; enforcement stays server-side.
+        const monthlyLimit = isStarter ? 150 : data.free_monthly_limit;
+        const validLimit = Number.isSafeInteger(monthlyLimit) && monthlyLimit > 0;
         const number = value => new Intl.NumberFormat("id-ID").format(value);
-        if (data.plan === "pro") {
+        if (isPro && !reviewed) {
             output.textContent = "Unlimited — pencatatan tanpa batas";
-        } else if (data.plan === "free" && validUsage && validLimit) {
-            output.textContent = number(data.monthly_usage) + " / " + number(data.free_monthly_limit) + " pencatatan bulan ini";
-            progress.max = data.free_monthly_limit;
-            progress.value = Math.min(data.monthly_usage, data.free_monthly_limit);
+        } else if ((isFree || isStarter) && validUsage && validLimit) {
+            output.textContent = number(data.monthly_usage) + " / " + number(monthlyLimit) + (isStarter ? " transaksi bulan ini" : " pencatatan bulan ini");
+            progress.max = monthlyLimit;
+            progress.value = Math.min(data.monthly_usage, monthlyLimit);
             progress.hidden = false;
-            const remaining = Math.max(0, data.free_monthly_limit - data.monthly_usage);
-            if (remaining <= Math.min(5, data.free_monthly_limit * 0.1)) {
+            const remaining = Math.max(0, monthlyLimit - data.monthly_usage);
+            if (remaining <= Math.min(5, monthlyLimit * 0.1)) {
                 remainingNote.textContent = remaining === 0 ? "Kuota pencatatan bulan ini habis" : "Tersisa " + number(remaining) + " pencatatan bulan ini";
                 remainingNote.hidden = false;
             }
         } else {
             output.textContent = validUsage ? number(data.monthly_usage) + " pencatatan digunakan" : "Pemakaian belum tersedia.";
         }
-        if (data.plan === "free") {
+        if (isFree || isStarter) {
             quotaNote.textContent = validLimit
                 ? "Pemakaian bulan berjalan. Menghapus transaksi tidak mengembalikan kuota."
                 : "Batas bulanan belum tersedia. Menghapus transaksi tidak mengembalikan kuota.";
