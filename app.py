@@ -1,3 +1,5 @@
+import checkout_midtrans
+from lifetime_checkout import CheckoutError, offers, reserve_order
 from entitlement_reader import read_entitlement, entitlement_status
 from category_resolver import category_sql, RESOLVER_VERSION, REVIEW_MARKER
 import os
@@ -36,7 +38,7 @@ DASHBOARD_ALLOWED_ORIGINS = [
 CORS(
     app,
     resources={r"/api/*": {"origins": DASHBOARD_ALLOWED_ORIGINS}},
-    methods=["GET", "PATCH", "DELETE", "OPTIONS"],
+    methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type"],
     supports_credentials=False,
     always_send=False,
@@ -160,6 +162,62 @@ def home():
 @app.route("/upgrade")
 def upgrade_page():
     return render_template("upgrade.html")
+
+
+def checkout_error(error):
+    payload = dict(error=error.code)
+    if error.payment_id:
+        payload['payment_id'] = error.payment_id
+    return jsonify(payload), error.status
+
+
+@app.get("/api/checkout/products")
+def checkout_products():
+    conn = cursor = None
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        result = offers(cursor, g.user_id, now=datetime.now())
+        result['checkout_available'] = checkout_midtrans.ready()
+        return jsonify(result)
+    except CheckoutError as error:
+        return checkout_error(error)
+    except Exception:
+        return jsonify(error="checkout_unavailable"), 503
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
+
+
+@app.post("/api/checkout/orders")
+def checkout_order():
+    # Only an authenticated identity and an allowlisted product code can enter.
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict) or set(data) != {'product_code'}:
+        return jsonify(error="invalid_order_payload"), 400
+    if not checkout_midtrans.ready():
+        return jsonify(error="checkout_unavailable"), 503
+    conn = None
+    try:
+        conn = get_connection()
+        order = reserve_order(conn, g.user_id, data['product_code'])
+    except CheckoutError as error:
+        return checkout_error(error)
+    except Exception:
+        return jsonify(error="checkout_unavailable"), 503
+    finally:
+        if conn:
+            conn.close()
+    # No transaction/row lock is held during network I/O. Provider failure leaves
+    # the committed pending snapshot intact; it never marks an order paid.
+    success, result = checkout_midtrans.create_snap_transaction(
+        order['payment_id'], order['amount'], order['customer_id'])
+    if not success:
+        return jsonify(error="checkout_needs_reconciliation", payment_id=order['payment_id']), 502
+    return jsonify(payment_id=order['payment_id'], amount=order['amount'],
+                   redirect_url=result['redirect_url']), 201
 
 
 @app.route("/help")

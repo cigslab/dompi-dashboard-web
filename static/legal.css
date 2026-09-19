@@ -25,3 +25,12 @@ a:focus-visible { outline: 2px solid #4ade80; outline-offset: 4px; border-radius
 .upgrade-prices h3 { margin: 0 0 8px; font-size: 16px; }
 .upgrade-prices p { color: #4ade80; font-size: 24px; font-weight: 700; margin: 0; }
 .upgrade-cta { display: inline-flex; align-items: center; min-height: 48px; padding: 12px 18px; border-radius: 12px; color: #092312; background: #4ade80; text-decoration: none; font-weight: 650; }
+
+/* Lifetime checkout: scoped controls, safe hidden states and compact mobile cards. */
+[hidden] { display: none !important; }
+#upgradeProducts button { width: 100%; margin-top: 16px; font: inherit; border: 0; cursor: pointer; }
+#upgradeProducts button:disabled { opacity: .55; cursor: default; }
+#upgradeProducts h2 { font-size: 18px; }
+#upgradeRetry { color: #4ade80; background: #141d18; border: 1px solid #293830; border-radius: 8px; padding: 12px 18px; font: inherit; }
+button:focus-visible { outline: 2px solid #4ade80; outline-offset: 4px; }
+@media (max-width: 480px) { #upgradeProducts { grid-template-columns: 1fr; } }

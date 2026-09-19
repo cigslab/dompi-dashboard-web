@@ -15,7 +15,8 @@ class PublicPageTests(unittest.TestCase):
                     self.assertIn('<h1>' + title + '</h1>', html)
                     self.assertIn('lang="id"', html)
                     self.assertIn('/static/legal.css', html)
-                    self.assertNotIn('<script', html)
+                    if route != '/upgrade':
+                        self.assertNotIn('<script', html)
                     self.assertNotIn('test-init-data', html)
             connection.assert_not_called()
 
@@ -25,11 +26,14 @@ class PublicPageTests(unittest.TestCase):
         self.assertIn('href="https://t.me/catetexpbot"', html)
         self.assertNotIn('<form', html)
 
-    def test_upgrade_is_manual_and_uses_existing_prices(self):
+    def test_upgrade_bootstraps_authenticated_lifetime_checkout(self):
         html = api.app.test_client().get('/upgrade').get_data(as_text=True)
         self.assertIn('href="https://t.me/pakedompi"', html)
-        self.assertIn('Rp9.900', html)
-        self.assertIn('Rp79.000', html)
+        self.assertNotIn('Rp9.900', html)
+        self.assertNotIn('Rp79.000', html)
+        self.assertIn('/static/upgrade.js', html)
+        self.assertIn('telegram-web-app.js', html)
+        self.assertIn('Export dan analitik lanjutan belum tersedia', html)
         self.assertIn('setelah pembayaran diverifikasi', html)
         self.assertNotIn('<form', html)
         self.assertEqual(api.app.test_client().post('/upgrade').status_code, 405)

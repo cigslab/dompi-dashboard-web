@@ -2,14 +2,20 @@
 {% block title %}Upgrade ke Pro{% endblock %}
 {% block content %}
 <h1>Upgrade ke Pro</h1>
-<p class="intro">Catat lebih leluasa dengan Dompi Pro. Proses upgrade dibantu secara manual melalui Telegram.</p>
-<section><h2>Pencatatan tanpa batas</h2><p>Nikmati unlimited pencatatan tanpa kuota bulanan Free selama Pro aktif. Kamu tetap dapat menggunakan pencatatan teks dan foto struk, ringkasan, serta analitik yang tersedia di Dompi. Fitur tersebut juga mengikuti kemampuan layanan saat ini; halaman ini tidak menjanjikan fitur tambahan yang belum tersedia.</p></section>
-<section><h2>Pilih masa aktif</h2>
-{# Existing prices: dompi-bot handlers/users.py, upgrade and handle_upgrade_choice. Keep aligned when the bot changes its catalog. #}
-<div class="upgrade-prices"><div><h3>30 hari</h3><p>Rp9.900</p></div><div><h3>365 hari</h3><p>Rp79.000</p></div></div>
-<p>Harga mengikuti pilihan paket pada bot Dompi saat halaman ini disusun. Konfirmasikan harga dan masa aktif dengan tim sebelum melakukan pembayaran.</p></section>
-<section><h2>Cara upgrade</h2><ol><li>Hubungi <strong>@pakedompi</strong> di Telegram dan sebutkan paket yang kamu pilih serta akun Telegram yang digunakan untuk Dompi.</li><li>Konfirmasikan harga dan instruksi pembayaran dengan tim.</li><li>Aktivasi Pro dilakukan secara manual setelah pembayaran diverifikasi. Setelah mendapat konfirmasi aktivasi, periksa status paket di halaman <strong>Akun</strong> di Mini App.</li></ol>
-<p>Membuka halaman atau menekan tombol di bawah tidak melakukan pembayaran maupun mengubah paketmu secara otomatis.</p>
-<p><a class="upgrade-cta" href="https://t.me/pakedompi">Hubungi @pakedompi untuk upgrade →</a></p></section>
+<p class="intro">Pilih paket lifetime yang sesuai. Lifetime berlaku selama layanan Dompi tersedia.</p>
+<p id="upgradeStatus" role="status" aria-live="polite">Memuat paket akun…</p>
+<button id="upgradeRetry" type="button" hidden>Coba lagi</button>
+<div id="upgradeProducts" class="upgrade-prices" aria-label="Pilihan paket"></div>
+<p id="checkoutStatus" role="status" aria-live="polite"></p>
+<a id="checkoutLink" class="upgrade-cta" hidden rel="noopener noreferrer">Lanjut ke pembayaran Midtrans →</a>
+<section><h2>Paket lifetime</h2>
+<p>Starter: pencatatan manual hingga 150 transaksi per bulan, daftar dan edit transaksi, kategori, analitik dasar, serta laporan bulanan. Foto struk tidak termasuk.</p>
+<p>Pro: semua fitur Starter, unlimited transaksi dan foto struk. Export dan analitik lanjutan belum tersedia.</p>
+<p>Aktivasi dilakukan setelah pembayaran diverifikasi. Membuka checkout tidak langsung mengaktifkan paket. Paket Pro berjangka yang sudah dimiliki tetap berlaku sampai tanggal berakhirnya.</p>
+</section>
+<p>Butuh bantuan pembayaran? Hubungi <a href="https://t.me/pakedompi">@pakedompi</a> dengan nomor order. Jangan membayar ulang jika status belum jelas.</p>
 <p>Baca <a href="/terms">Syarat &amp; Ketentuan</a> atau kunjungi <a href="/help">Bantuan &amp; Feedback</a>.</p>
+<noscript>Aktifkan JavaScript dan buka melalui Mini App Telegram untuk melihat paket akun.</noscript>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script src="{{ url_for('static', filename='upgrade.js') }}" defer></script>
 {% endblock %}
