@@ -11,7 +11,7 @@ let checks = 0;
     const scripts = [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g)].map(m => m[1]).filter(s => s.trim());
     for (const source of scripts) new vm.Script(source, {filename: file});
     checks++;
-    for (const name of ['analytics.js', 'navigation.js']) {
+    for (const name of ['analytics.js', 'navigation.js', 'export.js']) {
       const source = fs.readFileSync(path.resolve(__dirname, '../static', name), 'utf8');
       new vm.Script(source, {filename: name});
       assert(!/\bfetch\s*\(/.test(source), name + ' must use apiFetch');

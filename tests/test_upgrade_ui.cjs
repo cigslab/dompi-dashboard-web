@@ -165,7 +165,9 @@ let checks = 0;
 
     s = setup({...offer(), checkout_available: false}); await flush();
     assert(s.buttons().every(b => b.disabled));
-    assert.match(html, /Export dan analitik lanjutan belum tersedia/);
+    assert.match(html, /Export Data CSV/);
+    assert.match(html, /Analitik lanjutan belum tersedia/);
+    assert.doesNotMatch(html, /Export dan analitik lanjutan belum tersedia/);
     assert.match(html, /setelah pembayaran diverifikasi/); checks++;
     console.log(checks + ' upgrade UI checks passed');
 })().catch(error => {console.error(error); process.exitCode = 1;});

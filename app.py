@@ -1,3 +1,6 @@
+from export_ticket import ExportTickets, TTL_SECONDS
+from transaction_export import period_bounds, render_csv
+from plan_contract import Capabilities, resolve_capabilities
 from checkout_policy import checkout_allowed
 import checkout_midtrans
 from lifetime_checkout import CheckoutError, offers, reserve_order
@@ -17,7 +20,7 @@ from urllib.parse import parse_qsl
 from itsdangerous import URLSafeTimedSerializer, BadSignature
 
 import psycopg2
-from flask import Flask, jsonify, render_template, request, g
+from flask import Flask, jsonify, render_template, request, g, Response
 from flask_cors import CORS
 
 
@@ -26,6 +29,8 @@ app = Flask(__name__)
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "").strip()
 if not BOT_TOKEN:
     raise RuntimeError("BOT_TOKEN wajib tersedia untuk autentikasi dashboard")
+
+export_tickets = ExportTickets(BOT_TOKEN)
 
 INIT_DATA_MAX_AGE_SECONDS = int(os.getenv("INIT_DATA_MAX_AGE_SECONDS", "3600"))
 if INIT_DATA_MAX_AGE_SECONDS <= 0:
@@ -133,8 +138,12 @@ def authenticate_dashboard():
 
 @app.after_request
 def prevent_authenticated_response_caching(response):
-    if request.path.startswith("/api/"):
+    if request.path.startswith(("/api/", "/downloads/export/")):
         response.headers["Cache-Control"] = "no-store"
+    if request.path.startswith("/downloads/export/"):
+        response.headers["Referrer-Policy"] = "no-referrer"
+        response.headers["Access-Control-Allow-Origin"] = "https://web.telegram.org"
+        response.headers["X-Content-Type-Options"] = "nosniff"
     return response
 
 DATABASE_URL = os.getenv("DATABASE_URL")
@@ -237,6 +246,75 @@ def privacy_page():
 @app.route("/terms")
 def terms_page():
     return render_template("terms.html")
+
+
+@app.get("/api/export/transactions")
+def export_transactions():
+    return export_response(g.user_id, request.args.get('period', 'current_month'))
+
+
+@app.post("/api/export/ticket")
+def export_ticket():
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict) or set(body) != {'period'}:
+        return jsonify(error="Periode export tidak valid"), 400
+    return export_response(g.user_id, body['period'], ticket_only=True)
+
+
+@app.get("/downloads/export/<token>")
+def download_export(token):
+    # A narrowly scoped bearer ticket substitutes for the auth header, which
+    # native download clients cannot attach. Never accept a client owner/period.
+    try:
+        ticket = export_tickets.read(token)
+    except ValueError:
+        return jsonify(error="Tautan export tidak valid atau kedaluwarsa"), 401
+    return export_response(ticket['owner'], ticket['period'])
+
+
+def export_response(owner, period, ticket_only=False):
+    try:
+        bounds = period_bounds(period, datetime.now().date())
+    except ValueError:
+        return jsonify(error="Periode export tidak valid"), 400
+    conn = cursor = None
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        entitlement = read_entitlement(cursor, owner, now=datetime.now(), dialect='postgresql')
+        # Export consumes only the export capability. This local Free policy
+        # does not change recording, receipt or quota enforcement elsewhere.
+        if entitlement is None or entitlement.requires_review:
+            return jsonify(error="Export memerlukan paket Pro yang valid"), 403
+        capability = resolve_capabilities(entitlement,
+            free_policy=Capabilities(True, False, False, False, configured_free_monthly_limit()))
+        if not capability.export:
+            return jsonify(error="Export tersedia untuk Pro"), 403
+        if ticket_only:
+            token = export_tickets.issue(owner, period)
+            return jsonify(path='/downloads/export/' + token,
+                           filename='dompi-export-' + datetime.now().strftime('%Y-%m-%d') + '.csv',
+                           expires_in=TTL_SECONDS)
+        where = "user_id = %s AND currency = 'IDR'"
+        params = [owner]
+        if bounds:
+            where += " AND LEFT(date, 10) >= %s AND LEFT(date, 10) < %s"
+            params.extend(bounds)
+        cursor.execute(f"""SELECT date, type, category, analytics_category, amount, note
+            FROM expenses WHERE {where} ORDER BY date, id""", tuple(params))
+        content = render_csv(cursor, integer_amount)
+        filename = 'dompi-export-' + datetime.now().strftime('%Y-%m-%d') + '.csv'
+        return Response(content, content_type='text/csv; charset=utf-8',
+                        headers={'Content-Disposition': f'attachment; filename="{filename}"',
+                                 'X-Content-Type-Options': 'nosniff'})
+    except Exception:
+        # Do not log transaction text, amounts or credentials.
+        return jsonify(error="Export gagal. Data tidak dapat diekspor dengan aman."), 500
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
 
 
 @app.route("/api/profile")

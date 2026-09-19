@@ -35,6 +35,7 @@ function setup(attack) {
     let data;
     if(pathname==='/api/profile') { if(window.__profileError) return new Response('{}',{status:500}); data={display_name:attack?payloads[0]:'Nama A',username:window.__noUsername?null:(attack?payloads[1]:'user_a')}; }
     else if(pathname==='/api/account') { if(window.__accountError) return new Response('{}',{status:500}); data={entitlement:window.__accountEntitlement??{effective_plan:window.__unknownAccount?null:(window.__accountPlan||'free'),entitlement_source:window.__unknownAccount?null:(window.__accountPlan==='pro'?'pro_lifetime':'free'),requires_review:!!window.__unknownAccount,lifetime:window.__accountPlan==='pro',legacy_expires_at:null},plan:window.__unknownAccount?null:(window.__accountPlan||'free'),monthly_usage:window.__unknownAccount?null:(window.__accountUsage??37),usage_month:month,joined_at:window.__accountJoined??'2026-09-07',free_monthly_limit:window.__accountLimit??null}; }
+    else if(pathname==='/api/export/transactions') { await new Promise(r=>setTimeout(r,100)); return new Response('date,type,description,analytics_category,amount,note\r\n',{status:window.__exportError?500:200,headers:{'Content-Type':'text/csv; charset=utf-8','Content-Disposition':'attachment; filename="dompi-export-2026-09-19.csv"'}}); }
     else if(pathname==='/api/transactions/reset') { if(options.method==='DELETE') { await new Promise(r=>setTimeout(r,100)); data={success:true}; } else data={count:4,token:'test-reset-token'}; }
     else if(options.method&&options.method!=='GET') data={success:true};
     else if(pathname==='/api/categories/breakdown') {
@@ -141,8 +142,23 @@ async function runTests(index,attack){
     window.__accountEntitlement={effective_plan:'pro',entitlement_source:'pro_lifetime',requires_review:false};await loadAccountUsage();
     eq(document.querySelector('#accountUpgradeAction').hidden,true,'Pro upgrade hidden');
     eq(document.querySelector('#accountReceiptStatus').textContent,'Aktif','Pro receipt active');
-    eq(document.querySelector('#accountExportStatus').textContent,'Belum tersedia','export not yet available');
+    eq(document.querySelector('#accountExportStatus').textContent,'Aktif','Pro export active');
+    eq(document.querySelector('#accountExportControls').hidden,false,'Pro export controls visible');
     eq(document.querySelector('#accountAdvancedStatus').textContent,'Belum tersedia','advanced not yet available');
+    for(const id of ['accountExportPanel','accountExportPeriod','accountExportDownload']) {
+      const el=document.getElementById(id), rect=el.getBoundingClientRect();
+      eq(rect.left>=0&&rect.right<=innerWidth,true,'export within viewport '+id);
+      eq(el.scrollWidth<=el.clientWidth+1,true,'export no horizontal overflow '+id);
+    }
+    eq([...document.querySelector('#accountExportPeriod').options].map(o=>o.value),['current_month','last_3_months','all'],'export periods');
+    window.__exportError=true;
+    send('#accountExportControls','submit');
+    eq(document.querySelector('#accountExportPeriod').disabled,true,'export picker busy');
+    for(let i=0;i<50&&document.querySelector('#accountExportDownload').disabled;i++)await wait();
+    eq(document.querySelector('#accountExportMessage').textContent,'Export gagal. Silakan coba lagi.','export error');
+    eq(document.querySelector('#accountExportPeriod').disabled,false,'export retry enabled');
+    window.__exportError=false;
+
     window.__accountEntitlement.requires_review=true;await loadAccountUsage();
     eq(document.querySelector('#accountReceiptStatus').textContent,'Perlu ditinjau','ambiguous premium not active');
     window.__accountEntitlement=null;
@@ -332,24 +348,64 @@ async function runTests(index,attack){
     const report=document.createElement('pre');report.id='xssTestResults';report.style.whiteSpace='pre-wrap';report.style.overflowWrap='anywhere';report.textContent=JSON.stringify(result);document.body.prepend(report);
   }
 }
+// Targeted Export UI verification: /0?export=1 (optional &normal=1).
+// Does not replace the full dashboard/XSS checkpoint gate.
+async function runExportTests(index,attack) {
+  let checks=0;
+  const check=(value,label)=>{if(!value)throw Error(label);checks++;};
+  const wait=()=>new Promise(r=>setTimeout(r,60));
+  try {
+    document.querySelector('#accountMenu').click();
+    for(let i=0;i<50&&document.querySelector('#accountExportPanel').hidden;i++)await wait();
+    for(const [plan,source] of [['free','free'],['starter','starter_lifetime'],['pro','pro_lifetime'],['pro','pro_legacy']]) {
+      window.__accountEntitlement={effective_plan:plan,entitlement_source:source,requires_review:false,legacy_expires_at:'2099-01-01T00:00:00'};
+      await loadAccountUsage();
+      check(document.querySelector('#accountExportControls').hidden===(plan!=='pro'),'controls '+source);
+      check(document.querySelector('#accountExportLock').hidden===(plan==='pro'),'lock '+source);
+    }
+    for(const id of ['accountExportPanel','accountExportPeriod','accountExportDownload']) {
+      const el=document.getElementById(id),r=el.getBoundingClientRect();
+      check(r.left>=0&&r.right<=innerWidth,'viewport '+id);
+      check(el.scrollWidth<=el.clientWidth+1,'overflow '+id);
+    }
+    check(document.querySelector('#accountExportPeriod').options.length===3,'three periods');
+    window.__exportError=true;
+    document.querySelector('#accountExportControls').requestSubmit();
+    check(document.querySelector('#accountExportDownload').disabled,'busy button');
+    check(document.querySelector('#accountExportPeriod').disabled,'busy picker');
+    for(let i=0;i<50&&document.querySelector('#accountExportDownload').disabled;i++)await wait();
+    check(document.querySelector('#accountExportMessage').textContent.includes('gagal'),'error message');
+    check(!document.querySelector('#accountExportPeriod').disabled,'retry picker');
+    check(window.__dompiXss===0,'XSS payload inert');
+    check(window.__testErrors.length===0,'no script errors');
+    window.__exportError=false;
+    const result={scope:'export',pass:true,index,attack,checks,width:innerWidth};
+    await window.__reportFetch('/results',{method:'POST',body:JSON.stringify(result)});
+    const report=document.createElement('pre');report.id='xssTestResults';report.style.cssText='white-space:pre-wrap;overflow-wrap:anywhere';report.textContent=JSON.stringify(result);document.body.prepend(report);
+  } catch(error) {
+    const result={scope:'export',pass:false,index,attack,checks,error:String(error),width:innerWidth};
+    await window.__reportFetch('/results',{method:'POST',body:JSON.stringify(result)});
+    const report=document.createElement('pre');report.id='xssTestResults';report.textContent=JSON.stringify(result);document.body.prepend(report);
+  }
+}
 http.createServer((req,res)=>{
  const url=new URL(req.url,'http://127.0.0.1');
  if(url.pathname==='/results'){
   if(req.method==='POST'){let body='';req.on('data',b=>body+=b);req.on('end',()=>{const result=JSON.parse(body);results[`${result.index}-${result.attack}`]=result;console.log(JSON.stringify(result));res.end('ok');});return;}
   res.setHeader('Content-Type','application/json');res.end(JSON.stringify(results));return;
  }
- if(['/static/analytics.js','/static/navigation.js'].includes(url.pathname)){res.setHeader('Content-Type','application/javascript');res.end(fs.readFileSync(path.join(roots[0],url.pathname.slice(1))));return;}
+ if(['/static/analytics.js','/static/navigation.js','/static/export.js'].includes(url.pathname)){res.setHeader('Content-Type','application/javascript');res.end(fs.readFileSync(path.join(roots[0],url.pathname.slice(1))));return;}
  if(url.pathname.endsWith('style.css')){const i=Number(url.searchParams.get('index')||0);res.setHeader('Content-Type','text/css');res.end(fs.readFileSync(path.join(roots[i],'static/style.css')));return;}
  if(!/^\/0$/.test(url.pathname)){res.statusCode=404;res.end();return;}
  const index=Number(url.pathname.slice(1)),attack=url.searchParams.get('normal')!=='1';
  let html=fs.readFileSync(path.join(roots[index],'templates/dashboard.html'),'utf8');
  // All application innerHTML assignments must contain constant markup only.
- const applicationSource=html+'\n'+['analytics.js','navigation.js'].map(name=>fs.readFileSync(path.join(roots[index],'static',name),'utf8')).join('\n');
+ const applicationSource=html+'\n'+['analytics.js','navigation.js','export.js'].map(name=>fs.readFileSync(path.join(roots[index],'static',name),'utf8')).join('\n');
  for(const match of applicationSource.matchAll(/\.innerHTML\s*=\s*`([\s\S]*?)`/g))assert(!match[1].includes('${'));
  assert(!/\.innerHTML\s*=\s*\n?\s*\w+\.map/.test(applicationSource));
  html=html.replace(/<script src="https:[^"]+"><\/script>/g,'');
  html=html.replace('href="../static/style.css"',`href="/static/style.css?index=${index}"`);
  html=html.replace('<head>','<head><script>('+setup.toString()+')('+attack+');</script>');
- html=html.replace('</body>','<script>('+runTests.toString()+')('+index+','+attack+');</script></body>');
+ html=html.replace('</body>','<script>('+(url.searchParams.get('export')==='1'?runExportTests:runTests).toString()+')('+index+','+attack+');</script></body>');
  res.setHeader('Content-Type','text/html');res.end(html);
 }).listen(8765,'127.0.0.1',()=>console.log('Dashboard tests: http://127.0.0.1:8765/0; add ?normal=1 for normal-data regression.'));

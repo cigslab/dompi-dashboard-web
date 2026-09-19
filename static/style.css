@@ -1918,3 +1918,14 @@ body {
 .account-features a { color: #4ade80; padding: 10px 0; font-size: 13px; overflow-wrap: anywhere; }
 .account-features a:focus-visible { outline: 2px solid #4ade80; outline-offset: 3px; }
 .account-features [hidden], #accountUpgradeAction[hidden], #accountFeatures[hidden] { display: none; }
+
+.account-export h2 { font-size: 18px; margin: 0 0 12px; }
+.account-export a { color: #4ade80; }
+.account-export form { display: grid; gap: 12px; margin-top: 12px; }
+.account-export select { width: 100%; min-width: 0; min-height: 44px; padding: 10px; color: #e7eee9; background: #141d18; border: 1px solid #293830; border-radius: 8px; font: inherit; }
+.account-export [hidden], #accountExportPanel[hidden] { display: none; }
+.account-export button:disabled { opacity: .6; cursor: wait; }
+
+.account-export { min-width: 0; overflow-wrap: anywhere; }
+.account-export form > * { min-width: 0; max-width: 100%; }
+.account-export button { min-height: 44px; white-space: normal; }

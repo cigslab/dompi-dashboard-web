@@ -55,10 +55,25 @@
                         <h2 id="accountFeaturesHeading">Fitur paket</h2>
                         <ul>
                             <li><span>Foto Struk</span><a id="accountReceiptLock" href="/upgrade" aria-label="Foto Struk terkunci, upgrade ke Pro" hidden>Terkunci · Pro →</a><span id="accountReceiptStatus"></span></li>
-                            <li><span>Export</span><a id="accountExportLock" href="/upgrade" aria-label="Export terkunci, upgrade ke Pro" hidden>Terkunci · Pro →</a><span id="accountExportStatus"></span></li>
                             <li><span>Analitik lanjutan</span><a id="accountAdvancedLock" href="/upgrade" aria-label="Analitik lanjutan terkunci, upgrade ke Pro" hidden>Terkunci · Pro →</a><span id="accountAdvancedStatus"></span></li>
                         </ul>
                         <p id="accountFeatureNote" class="account-caption"></p>
+                    </section>
+                    <section id="accountExportPanel" class="panel account-export" aria-labelledby="accountExportHeading" hidden>
+                        <h2 id="accountExportHeading">Export Data</h2>
+                        <a id="accountExportLock" href="/upgrade" aria-label="Export terkunci, upgrade ke Pro" hidden>Terkunci · Pro →</a>
+                        <span id="accountExportStatus"></span>
+                        <form id="accountExportControls" hidden>
+                            <label for="accountExportPeriod">Periode transaksi</label>
+                            <select id="accountExportPeriod" name="period">
+                                <option value="current_month">Bulan ini</option>
+                                <option value="last_3_months">3 bulan terakhir</option>
+                                <option value="all">Semua transaksi</option>
+                            </select>
+                            <p class="account-caption">CSV · IDR. 3 bulan terakhir mencakup bulan ini dan dua bulan sebelumnya.</p>
+                            <button id="accountExportDownload" class="account-retry" type="submit">Unduh CSV</button>
+                            <p id="accountExportMessage" class="account-caption" role="status" aria-live="polite"></p>
+                        </form>
                     </section>
                     <ul class="account-actions" aria-label="Layanan akun">
                         <li id="accountUpgradeAction" hidden><a href="/upgrade" class="account-action account-action-upgrade"><span>Upgrade ke Pro</span><span aria-hidden="true">→</span></a></li>
@@ -659,6 +674,8 @@ async function loadAccountUsage() {
     const remainingNote = document.getElementById("accountQuotaRemaining");
     remainingNote.hidden = true;
     document.getElementById("accountFeatures").hidden = true;
+    document.getElementById("accountExportPanel").hidden = true;
+    document.getElementById("accountExportControls").hidden = true;
     document.getElementById("accountUpgradeAction").hidden = true;
     progress.hidden = true;
     quotaNote.hidden = true;
@@ -690,14 +707,16 @@ async function loadAccountUsage() {
         for (const feature of ["Receipt", "Export", "Advanced"]) {
             const lock = document.getElementById("account" + feature + "Lock");
             const status = document.getElementById("account" + feature + "Status");
-            lock.hidden = !isStarter;
-            status.hidden = isStarter;
-            status.textContent = reviewed ? "Perlu ditinjau" : feature === "Receipt" && isPro ? "Aktif" : "Belum tersedia";
+            lock.hidden = !(isStarter || (feature === "Export" && isFree));
+            status.hidden = !lock.hidden;
+            status.textContent = reviewed ? "Perlu ditinjau" : ["Receipt", "Export"].includes(feature) && isPro ? "Aktif" : "Belum tersedia";
         }
+        document.getElementById("accountExportPanel").hidden = false;
+        document.getElementById("accountExportControls").hidden = !(isPro && !reviewed);
         document.getElementById("accountFeatureNote").textContent = reviewed
             ? "Status akun perlu ditinjau. Hubungi Bantuan & Feedback."
-            : isStarter ? "Export dan analitik lanjutan belum tersedia."
-            : "Foto Struk digunakan melalui bot Telegram. Export dan analitik lanjutan belum tersedia.";
+            : isStarter ? "Analitik lanjutan belum tersedia."
+            : "Foto Struk digunakan melalui bot Telegram. Analitik lanjutan belum tersedia.";
         const joined = document.getElementById("accountJoined");
         joined.textContent = formatAccountJoined(data.joined_at);
         joined.hidden = !joined.textContent;
@@ -2039,5 +2058,6 @@ dateRangeButton.addEventListener("click", function (e) {
 </script>
 <script src="/static/analytics.js"></script>
 <script src="/static/navigation.js"></script>
+<script src="/static/export.js"></script>
 </body>
 </html>
