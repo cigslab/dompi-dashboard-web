@@ -1,3 +1,4 @@
+from checkout_policy import checkout_allowed
 import checkout_midtrans
 from lifetime_checkout import CheckoutError, offers, reserve_order
 from entitlement_reader import read_entitlement, entitlement_status
@@ -178,7 +179,7 @@ def checkout_products():
         conn = get_connection()
         cursor = conn.cursor()
         result = offers(cursor, g.user_id, now=datetime.now())
-        result['checkout_available'] = checkout_midtrans.ready()
+        result['checkout_available'] = checkout_allowed(g.user_id) and checkout_midtrans.ready()
         return jsonify(result)
     except CheckoutError as error:
         return checkout_error(error)
@@ -193,6 +194,9 @@ def checkout_products():
 
 @app.post("/api/checkout/orders")
 def checkout_order():
+    # Gate before DB/provider work; identity comes only from verified Telegram auth.
+    if not checkout_allowed(g.user_id):
+        return jsonify(error="lifetime_checkout_disabled"), 403
     # Only an authenticated identity and an allowlisted product code can enter.
     data = request.get_json(silent=True)
     if not isinstance(data, dict) or set(data) != {'product_code'}:

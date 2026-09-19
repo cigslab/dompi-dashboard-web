@@ -118,3 +118,48 @@ Cleanup runs in finally, including interrupt handling (not SIGKILL/power loss).
 No application startup, schema migration or provider call occurs in this runner.
 Visual mobile review of the new page remains a rollout prerequisite; it is not
 claimed by this code-review checkpoint.
+
+
+## Canary policy / kill switch
+
+Both checkout endpoints use checkout_policy.checkout_allowed(verified_user_id).
+Only lifetime dashboard checkout is gated; bot legacy callbacks, pending-order
+fulfillment, quota and entitlement rules are untouched.
+
+Environment contract (read from process environment on each request):
+
+- LIFETIME_CHECKOUT_ENABLED: missing defaults to false. Only true/false accepted,
+  case-insensitive with outer whitespace ignored. Empty/other values are invalid.
+- LIFETIME_CHECKOUT_CANARY_IDS: missing, empty or whitespace-only means no canaries.
+  Otherwise comma-separated positive decimal Telegram IDs; whitespace around
+  tokens allowed. No leading zero, sign, decimal, empty token or trailing comma.
+  IDs must be <=9007199254740991; input at most16384 characters. Duplicates collapse.
+- Any invalid config denies EVERY user, even when ENABLED=true.
+- Access = valid config AND (enabled OR verified user ID in allowlist).
+  This never replaces Telegram auth, product eligibility or provider readiness.
+
+Default/full stop:
+
+    LIFETIME_CHECKOUT_ENABLED=false
+    LIFETIME_CHECKOUT_CANARY_IDS=
+
+Canary mode: ENABLED=false, CANARY_IDS contains operator-supplied verified IDs.
+No actual IDs are embedded in source. ENABLED=true opens to all eligible users
+only if the allowlist configuration is also valid.
+
+Under this OR policy, false alone does NOT block canaries. To stop everyone,
+set false AND clear CANARY_IDS. Railway environment updates must take effect on
+all running workers; reading os.environ per request is not an external config
+subscription. Requests already admitted may finish; this switch does not cancel
+committed snapshots or provider calls in flight. Keep fulfillment operational.
+
+GET products retains eligible plan information but checkout_available=false when
+policy denies (also false if provider unavailable). Existing renderer disables
+buttons and labels them Checkout belum tersedia. POST denies with
+403/lifetime_checkout_disabled before payload handling, DB access or Snap.
+Invalid/expired auth still returns401 via the unchanged auth middleware.
+
+Targeted verification: 16 Python tests (policy/authenticated gate + affected
+checkout routes) and 10 existing upgrade UI checks passed. No live provider or
+production DB was accessed; PostgreSQL concurrency tests were not repeated
+because no persistence/locking SQL changed.

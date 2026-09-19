@@ -30,6 +30,9 @@ class LifetimeCheckoutTests(unittest.TestCase):
 
     def setUp(self):
         self.setUpFixture()
+        policy_env = patch.dict(os.environ, {
+            'LIFETIME_CHECKOUT_ENABLED': 'true', 'LIFETIME_CHECKOUT_CANARY_IDS': ''})
+        policy_env.start(); self.addCleanup(policy_env.stop)
         self.get_connection.return_value = CheckoutConnection(self.db)
         self.db.execute('ALTER TABLE users ADD COLUMN lifetime_plan TEXT')
         self.db.execute('ALTER TABLE users ADD COLUMN customer_id TEXT')
