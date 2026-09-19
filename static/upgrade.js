@@ -69,12 +69,18 @@
         try {
             const data = await api('/api/checkout/products');
             const entitlement = data.entitlement;
-            if (data.lifetime_plan === 'pro') {
+            const isProLifetime = entitlement.effective_plan === 'pro' &&
+                entitlement.entitlement_source === 'pro_lifetime';
+            const isStarter = entitlement.effective_plan === 'starter' &&
+                entitlement.entitlement_source === 'starter_lifetime';
+            const isLegacyPro = entitlement.effective_plan === 'pro' &&
+                entitlement.entitlement_source === 'pro_legacy';
+            if (isProLifetime) {
                 status.textContent = 'Kamu sudah menggunakan Pro Lifetime';
                 return;
             }
-            status.textContent = data.lifetime_plan === 'starter' ? 'Starter Lifetime' : 'Paket Free';
-            if (entitlement.entitlement_source === 'pro_legacy' && entitlement.legacy_expires_at) {
+            status.textContent = isStarter ? 'Starter Lifetime aktif' : 'Paket Free';
+            if (isLegacyPro && entitlement.legacy_expires_at) {
                 const expiry = new Date(entitlement.legacy_expires_at);
                 const formatted = Number.isNaN(expiry.getTime()) ? '' :
                     expiry.toLocaleDateString('id-ID', {day: 'numeric', month: 'short', year: 'numeric'});
@@ -87,16 +93,25 @@
                 const title = document.createElement('h2');
                 title.textContent = names[product.product_code];
                 const price = document.createElement('p');
-                price.textContent = new Intl.NumberFormat('id-ID', {
+                const isUpgrade = product.product_code === 'starter_to_pro_lifetime';
+                price.textContent = (isUpgrade ? 'Tambah ' : '') + new Intl.NumberFormat('id-ID', {
                     style: 'currency', currency: 'IDR', maximumFractionDigits: 0
                 }).format(product.amount);
                 const button = document.createElement('button');
                 button.type = 'button';
                 button.className = 'upgrade-cta';
-                button.textContent = data.checkout_available ? 'Pilih ' + names[product.product_code] : 'Checkout belum tersedia';
+                button.textContent = data.checkout_available
+                    ? (isUpgrade ? 'Upgrade ke Pro' : 'Pilih ' + names[product.product_code])
+                    : 'Checkout belum tersedia';
                 button.disabled = !data.checkout_available || finishedAttempt;
                 button.addEventListener('click', () => buy(product.product_code));
-                card.append(title, price, button);
+                card.append(title, price);
+                if (isUpgrade) {
+                    const explanation = document.createElement('small');
+                    explanation.textContent = 'Selisih harga dari Starter Lifetime ke Pro Lifetime.';
+                    card.append(explanation);
+                }
+                card.append(button);
                 products.append(card);
             }
         } catch (error) {

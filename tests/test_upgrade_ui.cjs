@@ -32,6 +32,7 @@ const products = {
 };
 function offer(lifetime = null, source = 'free', codes = ['starter_lifetime', 'pro_lifetime']) {
     return {lifetime_plan: lifetime, entitlement: {entitlement_source: source,
+        effective_plan: source === 'starter_lifetime' ? 'starter' : source === 'free' ? 'free' : 'pro',
         legacy_expires_at: source === 'pro_legacy' ? '2099-01-01T00:00:00' : null},
         products: codes.map(code => products[code]), checkout_available: true};
 }
@@ -85,10 +86,13 @@ let checks = 0;
 
     s = setup(offer('starter', 'starter_lifetime', ['starter_to_pro_lifetime']));
     await flush();
-    assert.equal(s.el('upgradeStatus').textContent, 'Starter Lifetime');
+    assert.equal(s.el('upgradeStatus').textContent, 'Starter Lifetime aktif');
     assert.equal(s.buttons().length, 1);
-    assert.match(s.buttons()[0].textContent, /Upgrade ke Pro/);
-    assert.equal(s.el('upgradeProducts').children[0].children[1].textContent.replace(/\s/g, ''), 'Rp30.000');
+    assert.equal(s.buttons()[0].textContent, 'Upgrade ke Pro');
+    assert.equal(s.el('upgradeProducts').children[0].children[1].textContent.replace(/\s/g, ''), 'TambahRp30.000');
+    assert.match(s.el('upgradeProducts').children[0].children[2].textContent, /Selisih harga/);
+    await s.buttons()[0].click();
+    assert.deepEqual(JSON.parse(s.calls[1][1].body), {product_code: 'starter_to_pro_lifetime'});
     checks++;
 
     s = setup(offer('pro', 'pro_lifetime', [])); await flush();
@@ -101,7 +105,25 @@ let checks = 0;
     assert.equal(s.buttons().length, 2);
     s = setup(offer('starter', 'pro_legacy', ['starter_to_pro_lifetime'])); await flush();
     assert.match(s.el('upgradeStatus').textContent, /Starter Lifetime · Pro aktif/);
-    assert.equal(s.buttons().length, 1); checks++;
+    assert.equal(s.buttons().length, 1);
+    assert.equal(s.buttons()[0].textContent, 'Upgrade ke Pro'); checks++;
+
+    // A legacy-only account never gets the differential upgrade offer.
+    s = setup(offer(null, 'pro_legacy')); await flush();
+    assert(!s.buttons().some(button => button.textContent === 'Upgrade ke Pro'));
+    assert.deepEqual(s.el('upgradeProducts').children.map(c => c.children[1].textContent.replace(/\s/g, '')), ['Rp99.000', 'Rp129.000']);
+    // Expired legacy follows the API resolver; no client-side lifetime conversion.
+    s = setup(offer(null, 'free')); await flush();
+    assert.equal(s.el('upgradeStatus').textContent, 'Paket Free');
+    s = setup(offer('starter', 'starter_lifetime', ['starter_to_pro_lifetime']));
+    await flush();
+    assert.equal(s.el('upgradeStatus').textContent, 'Starter Lifetime aktif'); checks++;
+
+    s = setup({...offer('starter', 'starter_lifetime', ['starter_to_pro_lifetime']), checkout_available: false});
+    await flush();
+    assert.equal(s.buttons().length, 1);
+    assert(s.buttons()[0].disabled);
+    assert.equal(s.buttons()[0].textContent, 'Checkout belum tersedia'); checks++;
 
     s = setup(offer(), {noAuth: true}); await flush();
     assert.equal(s.calls.length, 0);
