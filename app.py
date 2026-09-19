@@ -655,10 +655,30 @@ def categories():
 
         if conn:
             conn.close()
+
+
+def category_period_filter():
+    """Additive range support; legacy month/all-time callers retain semantics."""
+    month = request.args.get('month', '')
+    start, end = request.args.get('start', ''), request.args.get('end', '')
+    if month and (start or end):
+        raise ValueError('Mixed period filters')
+    if start or end:
+        if not all(re.fullmatch(r'[0-9]{4}-[0-9]{2}-[0-9]{2}', v) for v in (start, end)):
+            raise ValueError('Invalid date range')
+        if date.fromisoformat(start) > date.fromisoformat(end):
+            raise ValueError('Reversed date range')
+        return 'LEFT(date, 10) BETWEEN %s AND %s', [start, end]
+    if month and not re.fullmatch(r'[0-9]{4}-(?:0[1-9]|1[0-2])', month):
+        raise ValueError('Invalid month')
+    return 'date LIKE %s', [month + '-%' if month else '%']
+
+
 @app.route("/api/categories/breakdown")
 def category_breakdown():
-    month = request.args.get("month", "")
-    if month and not re.fullmatch(r"[0-9]{4}-(?:0[1-9]|1[0-2])", month):
+    try:
+        period_sql, period_params = category_period_filter()
+    except ValueError:
         return jsonify(error="Periode harus YYYY-MM"), 400
     conn = None
     cursor = None
@@ -671,11 +691,11 @@ def category_breakdown():
                    COUNT(*) AS transaction_count, SUM(amount) AS total
             FROM expenses
             WHERE user_id = %s AND currency = 'IDR' AND type = 'expense'
-              AND date LIKE %s
+              AND {period_sql}
             GROUP BY {category_sql()}
             ORDER BY total DESC, category ASC
             """,
-            (g.user_id, month + '-%' if month else '%'),
+            tuple([g.user_id] + period_params),
         )
         rows = [(category, count, integer_amount(total))
                 for category, count, total in cursor.fetchall()]
@@ -1095,14 +1115,15 @@ def category_transactions():
 
 @app.route('/api/categories/review')
 def category_review():
-    month = request.args.get('month', '')
-    if month and not re.fullmatch(r'[0-9]{4}-(?:0[1-9]|1[0-2])', month):
+    try:
+        period_sql, period_params = category_period_filter()
+    except ValueError:
         return jsonify(error='Periode tidak valid'), 400
     conn = cursor = None
     try:
         conn = get_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT type, COUNT(*), SUM(amount) FROM expenses WHERE user_id = %s AND currency = 'IDR' AND analytics_category = %s AND type IN ('expense', 'income') AND date LIKE %s GROUP BY type", (g.user_id, REVIEW_MARKER, month + '-%' if month else '%'))
+        cursor.execute(f"SELECT type, COUNT(*), SUM(amount) FROM expenses WHERE user_id = %s AND currency = 'IDR' AND analytics_category = %s AND type IN ('expense', 'income') AND {period_sql} GROUP BY type", tuple([g.user_id, REVIEW_MARKER] + period_params))
         return jsonify(items=[dict(type=r[0], count=r[1], total=integer_amount(r[2])) for r in cursor.fetchall()])
     except Exception:
         app.logger.exception('Review summary failed')

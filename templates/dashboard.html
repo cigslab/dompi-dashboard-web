@@ -22,10 +22,10 @@
             </div>
 
             <nav class="menu" aria-label="Navigasi utama">
-                <a href="#" class="menu-item active" id="overviewMenu">Beranda</a>
-                <a href="#" class="menu-item" id="transactionMenu">Transaksi</a>
-                <a href="#" class="menu-item" id="analyticsMenu">Analitik</a>
-                <a href="#" class="menu-item" id="accountMenu">Akun</a>
+                <a href="#" class="menu-item active" id="overviewMenu"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 10 12 3l9 7M5 9v12h5v-7h4v7h5V9"/></svg>Beranda</a>
+                <a href="#" class="menu-item" id="transactionMenu"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2V3m3 5h6m-6 4h6"/></svg>Transaksi</a>
+                <a href="#" class="menu-item" id="analyticsMenu"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 20V10m8 10V4m8 16v-7"/></svg>Analitik</a>
+                <a href="#" class="menu-item" id="accountMenu"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M16 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0M4 21v-2a8 8 0 0 1 16 0v2"/></svg>Akun</a>
             </nav>
 
         </aside>
@@ -369,134 +369,52 @@
                 </section>
             </div>
             <div id="analyticsPage" class="page-hidden">
-
                 <header class="page-header analytics-header">
-                    <div>
-                        <h1>Analitik</h1>
-                        <p class="subtitle">
-                            Pahami pola keuangan kamu.
-                        </p>
-                    </div>
-
-                    <select id="analyticsPeriod">
-                        <option value="3">3 bulan terakhir</option>
-                        <option value="6" selected>6 bulan terakhir</option>
-                        <option value="12">12 bulan terakhir</option>
-                    </select>
+                    <div><h1>Analitik</h1><p class="subtitle">Pahami pola keuangan kamu.</p></div>
+                    <label class="analytics-period-label">Periode
+                        <select id="analyticsPeriod">
+                            <option value="1" selected>Bulan ini</option>
+                            <option value="3">3 bulan terakhir</option>
+                            <option value="6">6 bulan terakhir</option>
+                            <option value="12">12 bulan terakhir</option>
+                        </select>
+                    </label>
                 </header>
-
-                <div class="analytics-tools">
-                    <button type="button" id="analyticsRetry">Muat ulang</button>
-                </div>
-                <section class="analytics-cashflow-card">
-
-                    <div class="analytics-card-header">
-                        <div>
-                            <h2>Tren Cashflow</h2>
-                            <p>
-                                Perbandingan pemasukan dan pengeluaran per bulan.
-                            </p>
-                        </div>
-
-                        <div class="analytics-legend">
-                            <span>
-                                <i class="legend-dot income-dot"></i>
-                                Pemasukan
-                            </span>
-
-                            <span>
-                                <i class="legend-dot expense-dot"></i>
-                                Pengeluaran
-                            </span>
-                        </div>
-                    </div>
-
-                    <div class="analytics-chart-area" id="cashflowChartArea">
-
-                        <div class="analytics-chart-placeholder">
-                            <strong>Grafik akan tampil di sini</strong>
-                            <span>
-                                Data cashflow sedang disiapkan.
-                            </span>
-                        </div>
-
-                    </div>
-
+                <div class="analytics-tools"><p id="analyticsStatus" role="status" aria-live="polite"></p><button type="button" id="analyticsRetry" hidden>Coba lagi</button></div>
+                <section class="analytics-section analytics-summary" aria-labelledby="analyticsSummaryTitle">
+                    <h2 id="analyticsSummaryTitle">Ringkasan periode</h2>
+                    <p id="analyticsRange" class="analytics-muted"></p>
+                    <dl class="analytics-totals">
+                        <div><dt>Pemasukan</dt><dd id="analyticsIncome">—</dd></div>
+                        <div><dt>Pengeluaran</dt><dd id="analyticsExpense">—</dd></div>
+                        <div><dt>Saldo Bersih</dt><dd id="analyticsBalance">—</dd></div>
+                    </dl>
                 </section>
-                <section class="analytics-comparison-card">
-
-                    <div class="analytics-card-header">
-                        <div>
-                            <h2>Perbandingan Bulanan</h2>
-                            <p>
-                                Lihat perubahan keuangan dari bulan ke bulan.
-                            </p>
-                        </div>
+                <section class="analytics-section" aria-labelledby="analyticsTrendTitle">
+                    <div class="analytics-section-heading"><h2 id="analyticsTrendTitle">Tren Cashflow</h2>
+                        <div class="analytics-legend"><span><i class="income-dot" aria-hidden="true"></i>Pemasukan</span><span><i class="expense-dot" aria-hidden="true"></i>Pengeluaran</span></div>
                     </div>
-
-                    <div
-                        id="monthlyComparisonList"
-                        class="monthly-comparison-list"
-                    >
-                        <div class="monthly-comparison-placeholder">
-                            Data perbandingan sedang disiapkan.
-                        </div>
-                    </div>
-
+                    <div id="cashflowChartArea" class="analytics-chart-area"></div>
                 </section>
-            <section id="analyticsBreakdown" class="analytics-breakdown">
-                <header class="page-header">
-                    <div><h2>Breakdown kategori</h2><p class="subtitle">Lihat ke mana uangmu paling banyak pergi.</p></div>
-                </header>
-                <div class="categories-period">
-                    <label for="analyticsCategoryMonth">Periode <input type="month" id="analyticsCategoryMonth"></label>
-                    <button type="button" id="categoriesAllTime">Semua waktu</button>
-                </div>
-                <button type="button" id="categoriesRetry" hidden>Coba lagi</button>
-                <p id="categoriesStatus" role="status" aria-live="polite"></p>
-                <div id="categoriesContent" hidden>
-                    <div class="summary-grid categories-summary">
-                        <div class="summary-card"><div class="summary-info"><p>Total Pengeluaran</p><h2 id="categoriesTotal">Rp0</h2></div></div>
-                        <div class="summary-card"><div class="summary-info"><p>Jumlah Kategori</p><h2 id="categoriesCount">0</h2></div></div>
-                        <div class="summary-card"><div class="summary-info"><p>Kategori Terbesar</p><h2 id="categoriesLargest">—</h2></div></div>
-                    </div>
-                    <div class="categories-layout">
-                        <section class="panel"><div class="panel-header"><h3>Distribusi pengeluaran</h3></div>
-                            <div id="categoriesDonut" role="img" aria-label="Distribusi pengeluaran"><div><span>Pengeluaran</span><strong id="categoriesDonutTotal">Rp0</strong></div></div>
-                        </section>
-                        <section class="panel"><div class="panel-header"><h3>Pengeluaran per kategori</h3></div><div id="categoriesList"></div></section>
-                    </div>
-                </div>
-            </section>
-
-            <section id="analyticsReport" class="analytics-report">
-                <header class="page-header"><div><h2>Ringkasan periode</h2><p class="subtitle">Ringkasan keuangan dalam satu tampilan.</p></div></header>
-                <form id="reportsFilters" class="reports-filters">
-                    <label>Periode<select id="reportsPeriod"><option value="current">Bulan ini</option><option value="last">Bulan lalu</option><option value="custom">Rentang tanggal</option></select></label>
-                    <div id="reportsCustom" hidden>
-                        <label>Dari<input type="date" id="reportsStart"></label>
-                        <label>Sampai<input type="date" id="reportsEnd"></label>
-                        <button type="submit">Tampilkan</button>
-                    </div>
-                </form>
-                <p id="reportsStatus" role="status" aria-live="polite"></p>
-                <button type="button" id="reportsRetry" hidden>Coba lagi</button>
-                <div id="reportsContent" hidden>
-                    <div class="summary-grid reports-summary">
-                        <div class="summary-card"><div class="summary-info"><p>Pemasukan</p><h2 id="reportsIncome">Rp0</h2></div></div>
-                        <div class="summary-card"><div class="summary-info"><p>Pengeluaran</p><h2 id="reportsExpense">Rp0</h2></div></div>
-                        <div class="summary-card"><div class="summary-info"><p>Saldo Bersih</p><h2 id="reportsBalance">Rp0</h2></div></div>
-                    </div>
-                    <section class="panel reports-period-summary">
-                        <h3>Rangkuman periode</h3>
-                        <dl><div><dt>Periode aktif</dt><dd id="reportsActivePeriod"></dd></div><div><dt>Rata-rata pengeluaran harian</dt><dd id="reportsAverage"></dd></div><div><dt>Jumlah transaksi</dt><dd id="reportsCount"></dd></div></dl>
-                        <p id="reportsAverageNote" class="reports-muted"></p>
-                    </section>
-                    <section class="panel reports-insight"><h3>Sekilas periode ini</h3><p id="reportsInsight"></p><p id="reportsComparisonPeriod" class="reports-muted"></p></section>
-                    <section class="panel reports-breakdown"><h3>Kategori pengeluaran</h3><div id="reportsCategories"></div></section>
-                </div>
-            </section>
-
+                <section id="analyticsBreakdown" class="analytics-section" aria-labelledby="analyticsCategoriesTitle">
+                    <h2 id="analyticsCategoriesTitle">Pengeluaran per kategori</h2>
+                    <p id="categoriesStatus" class="analytics-muted" role="status"></p>
+                    <div id="categoriesList" class="category-ranking"></div>
+                </section>
+                <section class="analytics-section analytics-comparison" aria-labelledby="analyticsComparisonTitle">
+                    <h2 id="analyticsComparisonTitle">Perbandingan Bulanan</h2>
+                    <p id="monthlyComparisonPeriod" class="analytics-muted"></p>
+                    <div id="monthlyComparisonList" class="comparison-highlights"></div>
+                </section>
+                <section id="analyticsInsights" class="analytics-section" aria-labelledby="analyticsInsightsTitle" hidden>
+                    <h2 id="analyticsInsightsTitle">Insight bulan ini</h2>
+                    <ul id="analyticsInsightsList" class="analytics-insights-list"></ul>
+                </section>
+                <section id="analyticsReview" class="analytics-section category-review-attention" aria-labelledby="analyticsReviewTitle" hidden>
+                    <h2 id="analyticsReviewTitle">Perlu ditinjau</h2>
+                    <p id="analyticsReviewCount"></p><p class="analytics-muted">Tinjau transaksi agar laporan lebih akurat</p>
+                    <div id="analyticsReviewActions"></div>
+                </section>
             </div>
                 </header>
 

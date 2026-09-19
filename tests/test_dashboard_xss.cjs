@@ -33,6 +33,14 @@ function setup(attack) {
     const pathname=new URL(url,location.href).pathname;
     window.__testCalls.push({path:pathname,query:new URL(url,location.href).search,method:options.method||'GET',body:options.body,auth:new Headers(options.headers).get('Authorization')});
     let data;
+    const fixtureKey={'/api/analytics/monthly':'monthly','/api/categories/breakdown':'categories','/api/categories/review':'reviews'}[pathname];
+    if(window.__analyticsFixture&&fixtureKey) {
+      const captured=JSON.stringify(window.__analyticsFixture[fixtureKey]);
+      if(window.__analyticsDelay&&new URL(url,location.href).searchParams.get('start')?.endsWith('-01')) await new Promise(r=>setTimeout(r,100));
+      if(window.__analyticsFailure)return new Response('{}',{status:500});
+      return new Response(captured,{headers:{'Content-Type':'application/json'}});
+    }
+
     if(pathname==='/api/profile') { if(window.__profileError) return new Response('{}',{status:500}); data={display_name:attack?payloads[0]:'Nama A',username:window.__noUsername?null:(attack?payloads[1]:'user_a')}; }
     else if(pathname==='/api/account') { if(window.__accountError) return new Response('{}',{status:500}); data={entitlement:window.__accountEntitlement??{effective_plan:window.__unknownAccount?null:(window.__accountPlan||'free'),entitlement_source:window.__unknownAccount?null:(window.__accountPlan==='pro'?'pro_lifetime':'free'),requires_review:!!window.__unknownAccount,lifetime:window.__accountPlan==='pro',legacy_expires_at:null},plan:window.__unknownAccount?null:(window.__accountPlan||'free'),monthly_usage:window.__unknownAccount?null:(window.__accountUsage??37),usage_month:month,joined_at:window.__accountJoined??'2026-09-07',free_monthly_limit:window.__accountLimit??null}; }
     else if(pathname==='/api/export/transactions') { await new Promise(r=>setTimeout(r,100)); return new Response('date,type,description,analytics_category,amount,note\r\n',{status:window.__exportError?500:200,headers:{'Content-Type':'text/csv; charset=utf-8','Content-Disposition':'attachment; filename="dompi-export-2026-09-19.csv"'}}); }
@@ -53,6 +61,8 @@ function setup(attack) {
     else if(pathname==='/api/cashflow') data=[{date,income:2000,expense:8000}];
     else if(pathname==='/api/categories') data=texts.map((category,i)=>({category,total:1000*(i+1)}));
     else if(pathname==='/api/analytics/monthly') { if(window.__monthlyError) return new Response('{}',{status:500}); data=window.__monthlyEmpty?[]:[{month,income:200000,expense:800000,transaction_count:attack?payloads[0]:24}]; if(window.__previousActivity){ const previous=new Date(now.getFullYear(),now.getMonth()-1,1); data=[{month,income:0,expense:0,transaction_count:0},{month:`${previous.getFullYear()}-${String(previous.getMonth()+1).padStart(2,'0')}`,income:10,expense:10,transaction_count:1}]; } }
+    else if(pathname==='/api/categories/review') data={items:[]};
+    else if(pathname==='/api/categories/transactions') data={items:[],has_more:false};
     else if(pathname==='/api/transactions') data=transactions;
     else throw new Error('Unexpected mocked API '+pathname);
     return new Response(JSON.stringify(data),{headers:{'Content-Type':'application/json'}});
@@ -63,7 +73,7 @@ async function runTests(index,attack){
   const eq=(actual,expected,name)=>{if(JSON.stringify(actual)!==JSON.stringify(expected))throw new Error(name+': '+JSON.stringify({actual,expected}));checks++;};
   const wait=()=>new Promise(r=>setTimeout(r,60));
   const text=(selector)=>Array.from(document.querySelectorAll(selector),e=>e.textContent.trim());
-  const refreshEndpoints=['/api/summary','/api/cashflow','/api/categories','/api/transactions','/api/analytics/monthly','/api/categories/breakdown','/api/reports'];
+  const refreshEndpoints=['/api/summary','/api/cashflow','/api/categories','/api/transactions','/api/analytics/monthly','/api/categories/breakdown','/api/categories/review'];
   const counts=()=>Object.fromEntries(refreshEndpoints.map(path=>[path,window.__testCalls.filter(c=>c.path===path&&c.method==='GET').length]));
   const assertRefresh=async(before,label)=>{
     for(let i=0;i<50&&refreshEndpoints.some(path=>counts()[path]<=before[path]);i++) await wait();
@@ -78,7 +88,7 @@ async function runTests(index,attack){
     eq(text('.menu .menu-item'),['Beranda','Transaksi','Analitik','Akun'],'four primary destinations');
     eq(document.querySelectorAll('#categoriesPage,#reportsPage,#categoriesMenu,#reportsMenu').length,0,'legacy pages and menus removed');
     eq(document.querySelector('#analyticsBreakdown').closest('#analyticsPage')!==null,true,'breakdown inside analytics');
-    eq(document.querySelector('#analyticsReport').closest('#analyticsPage')!==null,true,'report inside analytics');
+    eq(document.querySelector('#analyticsSummaryTitle').closest('#analyticsPage')!==null,true,'summary inside analytics');
     if(innerWidth<=900) {
       const nav=document.querySelector('.menu').getBoundingClientRect();
       eq(getComputedStyle(document.querySelector('.sidebar')).position,'sticky','top navigation sticky');
@@ -177,24 +187,10 @@ async function runTests(index,attack){
     if(document.querySelector('#categoryList'))eq(text('#categoryList strong'),window.__testTexts,'category panel');
     eq(text('.analytics-category-name').sort(),[...window.__testTexts].sort(),'analytics categories');
     send('#analyticsMenu','click');await wait();
-    eq(document.querySelectorAll('.monthly-comparison-empty').length,2,'zero pairs collapse to compact empty states');
-    eq(document.querySelectorAll('.monthly-comparison-icon').length,0,'decorative comparison icons removed');
-    eq(document.querySelector('.monthly-comparison-row:not(.monthly-comparison-empty)').querySelectorAll('.monthly-comparison-metric').length,4,'all four metric values preserved');
-    if(innerWidth<=900) {
-      const cells=[...document.querySelector('.monthly-comparison-metrics').children].map(e=>e.getBoundingClientRect());
-      eq(Math.abs(cells[0].top-cells[1].top)<2&&Math.abs(cells[2].top-cells[3].top)<2&&cells[2].top>cells[0].bottom,true,'mobile metrics form two by two grid');
-      eq(document.querySelector('.monthly-comparison-empty').getBoundingClientRect().height<120,true,'empty comparison compact');
-    }
     send('#overviewMenu','click');
-
-    window.__previousActivity=true;send('#analyticsPeriod','change');await wait();
-    eq(document.querySelectorAll('.monthly-comparison-empty').length,1,'previous activity prevents false empty state');
-    eq(document.querySelector('.monthly-comparison-content small').textContent.includes('100.0%'),true,'zero current month retains percentage decrease');
-    window.__previousActivity=false;send('#analyticsPeriod','change');await wait();
     eq(Array.from(document.querySelectorAll('.transaction-amount,.transaction-type'),e=>/^(transaction-amount|transaction-type) (income|expense)$/.test(e.className)).every(Boolean),true,'class whitelist');
     if(document.querySelector('.transaction-edit-button')){
       eq(document.querySelectorAll('.transaction-edit-button')[3].dataset.transactionId,String(window.__testTransactions[3].transaction_id),'ID literal');
-      eq(document.querySelector('.monthly-comparison-row').querySelectorAll('.monthly-comparison-content strong')[3].textContent.trim(),attack?window.__testTexts[0]:'24','monthly count');
       send('#transactionMenu','click');
       send('.transaction-action-button','click');
       eq(document.querySelector('.transaction-action-menu').classList.contains('open'),true,'action dropdown');
@@ -210,37 +206,9 @@ async function runTests(index,attack){
       send('.transaction-delete-button','click');await assertRefresh(beforeDelete,'delete');
       eq(window.__testCalls.some(c=>c.method==='DELETE'&&c.path==='/api/transactions/1'),true,'DELETE behavior');
     }
-    for (const endpoint of ['/api/summary','/api/cashflow','/api/categories','/api/transactions','/api/analytics/monthly','/api/categories/breakdown','/api/reports']) {
+    for (const endpoint of ['/api/summary','/api/cashflow','/api/categories','/api/transactions','/api/analytics/monthly','/api/categories/breakdown','/api/categories/review']) {
       eq(window.__testCalls.filter(c=>c.path===endpoint&&c.method==='GET').length>=3,true,'refresh after mutations '+endpoint);
     }
-    const before=window.__testCalls.filter(c=>c.path==='/api/categories/breakdown').length;
-    send('#analyticsCategoryMonth','change');await wait();
-    eq(window.__testCalls.filter(c=>c.path==='/api/categories/breakdown').length-before,1,'single analytics category listener');
-    const txBefore=window.__testCalls.filter(c=>c.path==='/api/transactions').length;
-    document.querySelector('#analyticsPeriod').value='12';send('#analyticsPeriod','change');await wait();
-    eq(document.querySelectorAll('.cashflow-month').length,12,'twelve months from aggregates');
-    eq(window.__testCalls.filter(c=>c.path==='/api/transactions').length,txBefore,'analytics independent of transaction fetch');
-    eq(document.querySelector('.cashflow-month:last-child .expense-bar').title.includes('800.000'),true,'trend uses full aggregate, not recent transactions');
-    const selectedMonth=document.querySelector('#analyticsCategoryMonth').value;
-    window.__categoryDelay=true;
-    document.querySelector('#analyticsCategoryMonth').value='2000-01';
-    document.querySelector('#analyticsCategoryMonth').value='2000-01';send('#analyticsCategoryMonth','change');
-    document.querySelector('#analyticsCategoryMonth').value=selectedMonth;send('#analyticsCategoryMonth','change');
-    await wait();await wait();await wait();await wait();
-    eq(text('.analytics-category-name').length,4,'late response does not overwrite selected month');
-    window.__categoryDelay=false;window.__analyticsError=true;
-    send('#analyticsCategoryMonth','change');await wait();
-    eq(document.querySelector('#categoriesStatus').textContent.includes('Gagal'),true,'analytics category error');
-    eq(document.querySelector('#categoriesRetry').hidden,false,'category retry available');
-    eq(document.querySelector('#categoriesContent').hidden,true,'category stale content hidden');
-    window.__analyticsError=false;send('#categoriesRetry','click');await wait();
-    eq(text('.analytics-category-name').length,4,'analytics retry');
-    window.__monthlyError=true;send('#analyticsPeriod','change');await wait();
-    eq(document.querySelector('#cashflowChartArea').textContent.includes('Gagal'),true,'monthly error state');
-    window.__monthlyError=false;window.__monthlyEmpty=true;send('#analyticsRetry','click');await wait();
-    eq(document.querySelector('#monthlyComparisonList').textContent.includes('Belum ada'),true,'monthly empty state');
-    window.__monthlyEmpty=false;send('#analyticsRetry','click');await wait();await wait();
-    eq(document.querySelectorAll('.cashflow-month').length,12,'monthly retry restores trend');
     send('#transactionMenu','click');
     const search=document.querySelector('#transactionSearch');
     search.value=attack?'quotes':'Kopi';send('#transactionSearch','input');
@@ -271,58 +239,7 @@ async function runTests(index,attack){
       if(innerWidth<=900 && menu==='#transactionMenu') eq([...document.querySelectorAll('.transaction-action-button')].every(e=>e.getBoundingClientRect().width>=44 && e.getBoundingClientRect().height>=44),true,'touch targets');
     }
     send('#analyticsMenu','click');await wait();
-    for(let i=0;i<50&&document.querySelector('#categoriesContent').hidden;i++) await wait();
-    eq(document.querySelector('#analyticsBreakdown').closest('main')!==null,true,'category inside main');
-    eq(document.querySelector('#analyticsBreakdown').getBoundingClientRect().width>0,true,'category visible');
-    eq(text('#categoriesList strong:not(.categories-amount)'),[...window.__testTexts].reverse(),'categories literal sorted');
-    eq(document.querySelector('#categoriesCount').textContent,'4','category count');
-    eq(text('.categories-percent'),['40%','30%','20%','10%'],'percentages');
-    eq(document.documentElement.scrollWidth<=innerWidth,true,'category page no overflow');
-    eq(window.__dompiXss,0,'category XSS');
-    document.querySelector('#analyticsCategoryMonth').value='2000-01';send('#analyticsCategoryMonth','change');
-    for(let i=0;i<50&&document.querySelector('#categoriesContent').hidden;i++) await wait();
-    eq(document.querySelector('#categoriesCount').textContent,'0','empty category count');
-    eq(document.querySelector('#categoriesStatus').textContent,'Belum ada pengeluaran pada periode ini.','empty state');
-    send('#categoriesAllTime','click');
-    for(let i=0;i<50&&document.querySelector('#categoriesContent').hidden;i++) await wait();
-    eq(document.querySelector('#categoriesCount').textContent,'4','all time reload');
-    send('#analyticsMenu','click');await wait();
-    eq(document.querySelector('#reportsStatus').textContent,'Memuat laporan…','report loading');
-    const reportReady=async()=>{for(let i=0;i<50&&document.querySelector('#reportsContent').hidden;i++)await wait();};
-    await reportReady();
-    eq(document.querySelector('#analyticsReport').closest('main')!==null,true,'report inside main');
-    eq(document.querySelector('#analyticsReport').getBoundingClientRect().width>0,true,'report visible');
-    eq(text('.reports-category-row strong:not(.reports-category-amount)'),[...window.__testTexts].reverse(),'report category literal');
-    eq(text('.reports-category-row span'),['40%','30%','20%','10%'],'report percentages');
-    eq(document.querySelector('#reportsIncome').textContent.includes('12.000.000'),true,'report income');
-    eq(document.querySelector('#reportsExpense').textContent.includes('4.000.000'),true,'report expense');
-    eq(document.querySelector('#reportsBalance').textContent.includes('8.000.000'),true,'report balance');
-    eq(document.querySelector('#reportsAverage').textContent.includes('250.000'),true,'report average');
-    eq(document.querySelector('#reportsCount').textContent,'24','report count');
-    eq(document.querySelector('#reportsInsight').textContent.includes('turun 20%'),true,'report insight');
-    eq(document.documentElement.scrollWidth<=innerWidth,true,'report no overflow');
-    document.querySelector('#reportsPeriod').value='last';send('#reportsPeriod','change');await reportReady();
-    eq(window.__testCalls.at(-1).query,'?period=last','last month query');
-    document.querySelector('#reportsPeriod').value='custom';send('#reportsPeriod','change');await reportReady();
-    eq(document.querySelector('#reportsCustom').hidden,false,'custom controls visible');
-    eq(document.documentElement.scrollWidth<=innerWidth,true,'custom controls no overflow');
-    document.querySelector('#reportsStart').value='2000-01-01';document.querySelector('#reportsEnd').value='2000-01-31';send('#reportsFilters','submit');await reportReady();
-    eq(window.__testCalls.at(-1).query,'?period=custom&start=2000-01-01&end=2000-01-31','custom query');
-    eq(document.querySelector('#reportsStatus').textContent,'Belum ada transaksi pada periode ini.','report empty');
-    window.__reportsError=true;send('#reportsFilters','submit');
-    for(let i=0;i<50&&document.querySelector('#reportsRetry').hidden;i++)await wait();
-    eq(document.querySelector('#reportsStatus').textContent,'Gagal memuat laporan. Silakan coba lagi.','report error');
-    eq(document.querySelector('#reportsContent').hidden,true,'stale content hidden on error');
-    window.__reportsError=false;send('#reportsRetry','click');await reportReady();
-    eq(document.querySelector('#reportsRetry').hidden,true,'report retry succeeds');
-    send('#overviewMenu','click');
-    eq(document.querySelector('#analyticsPage').classList.contains('page-hidden'),true,'leave reports');
-    eq(document.querySelector('#overviewPage').getBoundingClientRect().width>0,true,'overview unchanged');
-    document.querySelector('#reportsPeriod').value='current';send('#reportsPeriod','change');send('#analyticsMenu','click');await reportReady();
-    eq(window.__dompiXss,0,'report no XSS execution');
-    eq(document.querySelectorAll('#analyticsReport img,#analyticsReport svg[onload]').length,0,'report no injected markup');
-    eq(window.__testCalls.every(c=>c.auth==='tma test-init-data'),true,'reports authenticated');
-    eq(window.__testErrors,[],'reports no page errors');
+    checks+=await window.analyticsChecks(attack);
     send('#accountMenu','click');await wait();
     const resetDeletes=()=>window.__testCalls.filter(c=>c.path==='/api/transactions/reset'&&c.method==='DELETE').length;
     send('#accountDeleteOpen','click');
@@ -388,6 +305,40 @@ async function runExportTests(index,attack) {
     const report=document.createElement('pre');report.id='xssTestResults';report.textContent=JSON.stringify(result);document.body.prepend(report);
   }
 }
+async function runAnalyticsTests(index,attack) {
+  let result;
+  try { result={scope:'analytics',pass:true,index,attack,checks:await window.analyticsChecks(attack),width:innerWidth}; }
+  catch(error) { result={scope:'analytics',pass:false,index,attack,error:String(error),width:innerWidth}; }
+  await window.__reportFetch('/results',{method:'POST',body:JSON.stringify(result)});
+  const report=document.createElement('pre');report.id='xssTestResults';report.style.cssText='white-space:pre-wrap;overflow-wrap:anywhere';report.textContent=JSON.stringify(result);document.body.prepend(report);
+}
+// Focused finishing check: /0?insights=1. No analytics/browser matrix rerun.
+async function runInsightTests(index,attack) {
+  let checks=0,result;
+  const check=(ok,label)=>{if(!ok)throw Error(label);checks++;};
+  try {
+    const now=new Date(),key=offset=>{const d=new Date(now.getFullYear(),now.getMonth()+offset,1);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');};
+    const payload='<img src=x onerror="window.__dompiXss=1">';
+    window.__analyticsFixture={monthly:[{month:key(0),income:118000,expense:93000},{month:key(-1),income:100000,expense:100000}],categories:{categories:[{category:payload,total:60000},{category:'Lainnya',total:30000}]},reviews:{items:[{type:'expense',count:1,total:3000}]}};
+    document.getElementById('analyticsMenu').click();document.getElementById('analyticsPeriod').value='1';await window.loadAnalytics();
+    const section=document.getElementById('analyticsInsights'),list=document.getElementById('analyticsInsightsList');
+    check(!section.hidden&&list.children.length===3,'three supported insights');
+    check(list.textContent.includes(payload)&&!list.querySelector('img'),'XSS literal');
+    check(window.__dompiXss===0,'no execution');
+    check(list.textContent.includes('18%')&&list.textContent.includes('7%'),'monthly changes');
+    check(document.getElementById('monthlyComparisonList').compareDocumentPosition(section)&Node.DOCUMENT_POSITION_FOLLOWING,'after comparison');
+    check(section.compareDocumentPosition(document.getElementById('analyticsReview'))&Node.DOCUMENT_POSITION_FOLLOWING,'before review');
+    check(section.scrollWidth<=section.clientWidth&&document.documentElement.scrollWidth<=innerWidth,'no overflow');
+    window.__analyticsFixture.categories={categories:[]};window.__analyticsFixture.monthly=[];await window.loadAnalytics();
+    check(section.hidden&&list.children.length===0,'hide unsupported');
+    window.__analyticsFixture.categories={categories:[{category:'Makan & Minum',total:60000},{category:'Lainnya',total:30000}]};
+    window.__analyticsFixture.monthly=[{month:key(0),income:118000,expense:93000},{month:key(-1),income:100000,expense:100000}];
+    await window.loadAnalytics();
+    result={scope:'insights',pass:true,checks,width:innerWidth};
+  } catch(error) {result={scope:'insights',pass:false,checks,error:String(error),width:innerWidth};}
+  await window.__reportFetch('/results',{method:'POST',body:JSON.stringify(result)});
+  const report=document.createElement('pre');report.id='xssTestResults';report.style.cssText='white-space:pre-wrap;overflow-wrap:anywhere';report.textContent=JSON.stringify(result);document.body.prepend(report);
+}
 http.createServer((req,res)=>{
  const url=new URL(req.url,'http://127.0.0.1');
  if(url.pathname==='/results'){
@@ -406,6 +357,7 @@ http.createServer((req,res)=>{
  html=html.replace(/<script src="https:[^"]+"><\/script>/g,'');
  html=html.replace('href="../static/style.css"',`href="/static/style.css?index=${index}"`);
  html=html.replace('<head>','<head><script>('+setup.toString()+')('+attack+');</script>');
- html=html.replace('</body>','<script>('+(url.searchParams.get('export')==='1'?runExportTests:runTests).toString()+')('+index+','+attack+');</script></body>');
+ html=html.replace('</body>','<script>window.analyticsChecks='+require('./test_analytics_ui.cjs').toString()+';</script></body>');
+ html=html.replace('</body>','<script>('+(url.searchParams.get('insights')==='1'?runInsightTests:url.searchParams.get('analytics')==='1'?runAnalyticsTests:url.searchParams.get('export')==='1'?runExportTests:runTests).toString()+')('+index+','+attack+');</script></body>');
  res.setHeader('Content-Type','text/html');res.end(html);
 }).listen(8765,'127.0.0.1',()=>console.log('Dashboard tests: http://127.0.0.1:8765/0; add ?normal=1 for normal-data regression.'));

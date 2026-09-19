@@ -1,5 +1,5 @@
 (() => {
-let monthlyRequest = 0;
+let analyticsRequest = 0;
 
 function openCategoryTransactions(category, period, kind = 'expense') {
     const dialog = document.createElement('dialog');
@@ -75,542 +75,218 @@ function openCategoryTransactions(category, period, kind = 'expense') {
     load(1);
 }
 
-                function shiftMonth(monthKey, offset) {
-                    const [year, month] = monthKey.split("-").map(Number);
-
-                    const date = new Date(
-                        year,
-                        month - 1 + offset,
-                        1
-                    );
-
-                    return `${date.getFullYear()}-${String(
-                        date.getMonth() + 1
-                    ).padStart(2, "0")}`;
-                }
-
-
-                function shortMonthLabel(monthKey) {
-                    const [year, month] = monthKey.split("-");
-
-                    return new Date(
-                        Number(year),
-                        Number(month) - 1,
-                        1
-                    ).toLocaleDateString("id-ID", {
-                        month: "short",
-                        year: "numeric"
-                    });
-                }
-
-
-                function getMonthlyRecord(data, monthKey) {
-                    return data.find(
-                        item => item.month === monthKey
-                    ) || {
-                        month: monthKey,
-                        income: 0,
-                        expense: 0,
-                        transaction_count: 0
-                    };
-                }
-
-
-                function getChange(current, previous) {
-                    if (previous === 0) {
-                        return "—";
-                    }
-
-                    const percentage =
-                        ((current - previous) / previous) * 100;
-
-                    if (percentage > 0) {
-                        return `↑ ${Math.abs(percentage).toFixed(1)}%`;
-                    }
-
-                    if (percentage < 0) {
-                        return `↓ ${Math.abs(percentage).toFixed(1)}%`;
-                    }
-
-                    return "0%";
-                }
-
-
-                function renderMonthlyComparisons(monthlyData) {
-                    const container =
-                        document.getElementById("monthlyComparisonList");
-
-                    try {
-                        if (!monthlyData.length) {
-                            container.innerHTML = `
-                                <div class="monthly-comparison-placeholder">
-                                    Belum ada data bulanan.
-                                </div>
-                            `;
-                            return;
-                        }
-
-                        const latestMonth =
-                            monthlyData[0].month;
-
-                        const comparisons = [0, 1, 2].map(offset => {
-                            const currentKey =
-                                shiftMonth(latestMonth, -offset);
-
-                            const previousKey =
-                                shiftMonth(latestMonth, -(offset + 1));
-
-                            return {
-                                current:
-                                    getMonthlyRecord(
-                                        monthlyData,
-                                        currentKey
-                                    ),
-
-                                previous:
-                                    getMonthlyRecord(
-                                        monthlyData,
-                                        previousKey
-                                    )
-                            };
-                        });
-
-                        container.replaceChildren(
-                            ...comparisons.map(({ current, previous }) => {
-
-                                const currentNet =
-                                    current.income - current.expense;
-
-                                const previousNet =
-                                    previous.income - previous.expense;
-
-                                // Collapse only when BOTH compared months have no metric values.
-                                // Keep a zero current month visible when the previous month had activity.
-                                if ([current, previous].every(record =>
-                                    ['income', 'expense', 'transaction_count'].every(key => record[key] === 0))) {
-                                    const empty = document.createElement('div');
-                                    empty.className = 'monthly-comparison-row monthly-comparison-empty';
-                                    const heading = document.createElement('div');
-                                    heading.className = 'monthly-comparison-title';
-                                    heading.textContent = `${shortMonthLabel(current.month)} vs ${shortMonthLabel(previous.month)}`;
-                                    const message = document.createElement('p');
-                                    message.textContent = 'Belum ada aktivitas pada kedua bulan ini.';
-                                    empty.append(heading, message);
-                                    return empty;
-                                }
-
-                                const template = document.createElement("template");
-                                template.innerHTML = `
-                                    <div class="monthly-comparison-row">
-
-                                        <div class="monthly-comparison-title">
-
-                                            <span>vs</span>
-
-                                        </div>
-                                        <div class="monthly-comparison-metrics">
-                                            <div class="monthly-comparison-metric">
-
-                                                <div class="monthly-comparison-content">
-                                                    <span>Pemasukan</span>
-                                                    <strong>
-
-                                                    </strong>
-                                                    <small>
-
-                                                    </small>
-                                                </div>
-                                            </div>
-
-                                            <div class="monthly-comparison-metric">
-
-                                                <div class="monthly-comparison-content">
-                                                    <span>Pengeluaran</span>
-                                                    <strong>
-
-                                                    </strong>
-                                                    <small>
-
-                                                    </small>
-                                                </div>
-                                            </div>
-
-                                            <div class="monthly-comparison-metric">
-
-                                                <div class="monthly-comparison-content">
-                                                    <span>Net Cashflow</span>
-                                                    <strong>
-
-                                                    </strong>
-                                                    <small>
-
-                                                    </small>
-                                                </div>
-                                            </div>
-
-                                            <div class="monthly-comparison-metric">
-
-                                                <div class="monthly-comparison-content">
-                                                    <span>Transaksi</span>
-                                                    <strong>
-
-                                                    </strong>
-                                                    <small>
-
-                                                    </small>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                `;
-                                const row = template.content.firstElementChild;
-                                const title = row.querySelector(".monthly-comparison-title");
-                                title.prepend(document.createTextNode(shortMonthLabel(current.month) + " "));
-                                title.append(document.createTextNode(" " + shortMonthLabel(previous.month)));
-                                const values = [
-                                    [formatRupiah(current.income), getChange(current.income, previous.income)],
-                                    [formatRupiah(current.expense), getChange(current.expense, previous.expense)],
-                                    [formatRupiah(currentNet), getChange(currentNet, previousNet)],
-                                    [current.transaction_count, getChange(current.transaction_count, previous.transaction_count)],
-                                ];
-                                row.querySelectorAll(".monthly-comparison-content").forEach((metric, index) => {
-                                    metric.querySelector("strong").textContent = values[index][0];
-                                    metric.querySelector("small").textContent = values[index][1];
-                                });
-                                return row;
-                            })
-                        );
-
-                    } catch (error) {
-                        console.error(
-                            "Monthly comparison error:",
-                            error
-                        );
-
-                        container.innerHTML = `
-                            <div class="monthly-comparison-placeholder">
-                                Data perbandingan gagal dimuat.
-                            </div>
-                        `;
-                    }
-                }
-
-
-
-
-function renderTrend(data) {
-const monthlyCashflow = Object.fromEntries(data.map(item => [item.month, item]));
-        const analyticsPeriod =
-            document.getElementById("analyticsPeriod");
-
-        const selectedPeriod =
-            Number(analyticsPeriod.value);
-
-        const selectedMonths = [];
-
-        const today = new Date();
-
-        for (let i = selectedPeriod - 1; i >= 0; i--) {
-            const date = new Date(
-                today.getFullYear(),
-                today.getMonth() - i,
-                1
-            );
-
-            const key =
-                `${date.getFullYear()}-${String(
-                    date.getMonth() + 1
-                ).padStart(2, "0")}`;
-
-            const label =
-                date.toLocaleDateString("id-ID", {
-                    month: "short",
-                    year: "numeric"
-                });
-
-            selectedMonths.push({
-                key: key,
-                label: label,
-                income: monthlyCashflow[key]?.income || 0,
-                expense: monthlyCashflow[key]?.expense || 0
-            });
-        }
-        const cashflowChartArea =
-            document.getElementById("cashflowChartArea");
-
-        const maxCashflowValue = Math.max(
-            ...selectedMonths.map(month => month.income),
-            ...selectedMonths.map(month => month.expense),
-            1
-        );
-
-        cashflowChartArea.innerHTML = `
-            <div class="cashflow-chart-wrapper">
-
-                <div class="cashflow-y-axis">
-                    <span></span>
-                    <span></span>
-                    <span></span>
-                    <span></span>
-                    <span>Rp0</span>
-                </div>
-
-                <div
-                    class="cashflow-chart"
-
-                >
-
-                    <div class="cashflow-grid-lines">
-                        <span></span>
-                        <span></span>
-                        <span></span>
-                        <span></span>
-                        <span></span>
-                    </div>
-
-
-
-                </div>
-
-            </div>
-        `;
-        cashflowChartArea.querySelectorAll(".cashflow-y-axis span").forEach((label, index) => {
-            if (index < 4) label.textContent = formatRupiah(maxCashflowValue * [1, 0.75, 0.5, 0.25][index]);
-        });
-        const cashflowBars = cashflowChartArea.querySelector(".cashflow-chart");
-        cashflowBars.style.gridTemplateColumns = `repeat(${selectedMonths.length}, minmax(0, 1fr))`;
-        selectedMonths.forEach(month => {
-            const incomeHeight = (month.income / maxCashflowValue) * 100;
-            const expenseHeight = (month.expense / maxCashflowValue) * 100;
-            const template = document.createElement("template");
-            template.innerHTML = `
-                            <div class="cashflow-month">
-
-                                <div class="cashflow-bars">
-
-                                    <div
-                                        class="cashflow-bar income-bar"
-                                    ></div>
-
-                                    <div
-                                        class="cashflow-bar expense-bar"
-                                    ></div>
-
-                                </div>
-
-                                <span class="cashflow-month-label">
-
-                                </span>
-
-                            </div>
-                        `;
-            const row = template.content.firstElementChild;
-            const incomeBar = row.querySelector(".income-bar");
-            const expenseBar = row.querySelector(".expense-bar");
-            incomeBar.style.height = `${incomeHeight}%`;
-            expenseBar.style.height = `${expenseHeight}%`;
-            incomeBar.title = "Pemasukan: " + formatRupiah(month.income);
-            expenseBar.title = "Pengeluaran: " + formatRupiah(month.expense);
-            row.querySelector(".cashflow-month-label").textContent = month.label;
-            cashflowBars.appendChild(row);
-        });
+function shiftMonth(month, offset) {
+    const [year, number] = month.split('-').map(Number);
+    const value = new Date(year, number - 1 + offset, 1);
+    return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}`;
 }
-async function loadMonthly() {
-    const request = ++monthlyRequest;
-    document.getElementById('cashflowChartArea').textContent = 'Memuat tren…';
-    document.getElementById('monthlyComparisonList').textContent = 'Memuat perbandingan…';
-    try {
-        const response = await apiFetch('/api/analytics/monthly');
-        if (!response.ok) throw new Error('Monthly analytics failed');
-        const data = await response.json();
-        if (request !== monthlyRequest) return;
-        renderTrend(data);
-        renderMonthlyComparisons(data);
-    } catch (error) {
-        if (request !== monthlyRequest) return;
-        document.getElementById('cashflowChartArea').textContent = 'Gagal memuat tren. Silakan coba lagi.';
-        document.getElementById('monthlyComparisonList').textContent = 'Gagal memuat perbandingan.';
-    }
+function monthLabel(month, long = false) {
+    return new Date(month + '-01T00:00:00').toLocaleDateString('id-ID', {month: long ? 'long' : 'short', year: 'numeric'});
 }
-function setupCategoryBreakdown() {
-    const month = document.getElementById('analyticsCategoryMonth');
-    const status = document.getElementById('categoriesStatus');
-    const content = document.getElementById('categoriesContent');
-    const attention = document.createElement('section');
-    attention.className = 'category-review-attention';
-    content.before(attention);
-    const colors = ['#67e58a', '#77b9a4', '#719aa8', '#b1bb7b', '#ad92b5', '#d3a578'];
-    let requestNumber = 0;
-    const retry = document.getElementById('categoriesRetry');
+function selectedPeriod() {
+    const count = Number(document.getElementById('analyticsPeriod').value);
+    if (![1, 3, 6, 12].includes(count)) throw new Error('Invalid period');
     const now = new Date();
-    month.value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    async function load() {
-        const current = ++requestNumber;
-        content.hidden = true;
-        retry.hidden = true;
-        attention.replaceChildren();
-        status.textContent = 'Memuat kategori…';
-        try {
-            const response = await apiFetch('/api/categories/breakdown?month=' + encodeURIComponent(month.value));
-            if (!response.ok) throw new Error('Category request failed');
-            const data = await response.json();
-            const reviewResponse = await apiFetch('/api/categories/review?month=' + encodeURIComponent(month.value));
-            if (!reviewResponse.ok) throw new Error('Review request failed');
-            const reviews = await reviewResponse.json();
-            if (current !== requestNumber) return;
-            for (const item of reviews.items) {
-                const button = document.createElement('button');
-                button.type = 'button';
-                button.className = 'category-review-badge';
-                button.textContent = `Perlu ditinjau · ${item.count} ${item.type === 'income' ? 'pemasukan' : 'pengeluaran'} · ${formatRupiah(item.total)}`;
-                button.addEventListener('click', () => openCategoryTransactions('Perlu ditinjau', {month: month.value, review: '1'}, item.type));
-                attention.append(button);
-            }
-            const ordinary = data.categories.filter(item => item.category !== 'Perlu ditinjau');
-            const ordinaryTotal = ordinary.reduce((sum, item) => sum + Number(item.total), 0);
-            const explanation = document.createElement('p');
-            explanation.textContent = 'Donut dan persentase hanya mencakup kategori biasa. Perlu ditinjau tidak termasuk; total pengeluaran tetap mencakup semuanya.';
-            attention.append(explanation);
-            document.getElementById('categoriesTotal').textContent = formatRupiah(data.total_expense);
-            document.getElementById('categoriesCount').textContent = ordinary.length;
-            document.getElementById('categoriesLargest').textContent = ordinary[0]?.category || '—';
-            document.getElementById('categoriesDonutTotal').textContent = formatRupiah(ordinaryTotal);
-            const list = document.getElementById('categoriesList');
-            list.replaceChildren();
-            let cumulative = 0;
-            const stops = [];
-            ordinary.forEach((item, index) => {
-                const color = colors[index % colors.length];
-                const row = document.createElement('button');
-                row.type = 'button';
-                row.className = 'categories-row category-drill-trigger';
-                row.addEventListener('click', () => openCategoryTransactions(item.category, {month: month.value}));
-                const dot = document.createElement('span');
-                dot.className = 'categories-dot';
-                dot.style.backgroundColor = color;
-                const name = document.createElement('strong');
-                name.className = 'analytics-category-name';
-                name.textContent = item.category;
-                const count = document.createElement('span');
-                count.className = 'categories-meta';
-                count.textContent = `${item.transaction_count} transaksi`;
-                const amount = document.createElement('strong');
-                amount.className = 'categories-amount';
-                amount.textContent = formatRupiah(item.total);
-                const percent = document.createElement('span');
-                percent.className = 'categories-meta categories-percent';
-                percent.textContent = `${(ordinaryTotal ? Number(item.total) / ordinaryTotal * 100 : 0).toLocaleString('id-ID', {maximumFractionDigits: 2})}%`;
-                row.append(dot, name, count, amount, percent);
-                list.appendChild(row);
-                const share = ordinaryTotal > 0 ? Number(item.total) / ordinaryTotal * 100 : 0;
-                const end = cumulative + share;
-                stops.push(`${color} ${cumulative}% ${end}%`);
-                cumulative = end;
-            });
-            const donut = document.getElementById('categoriesDonut');
-            donut.style.background = stops.length ? `conic-gradient(${stops.join(',')})` : '#26302c';
-            donut.setAttribute('aria-label', `Distribusi ${ordinary.length} kategori biasa. Total ${formatRupiah(ordinaryTotal)}. Rincian tersedia pada daftar kategori.`);
-            status.textContent = data.categories.length ? '' : 'Belum ada pengeluaran pada periode ini.';
-            content.hidden = false;
-        } catch (error) {
-            if (current !== requestNumber) return;
-            status.textContent = 'Gagal memuat kategori. Silakan coba lagi.';
-            retry.hidden = false;
+    const current = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const months = Array.from({length: count}, (_, index) => shiftMonth(current, index - count + 1));
+    const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+    return {months, current, start: months[0] + '-01', end: current + '-' + lastDay};
+}
+function node(tag, className, text) {
+    const element = document.createElement(tag);
+    if (className) element.className = className;
+    if (text !== undefined) element.textContent = text;
+    return element;
+}
+const text = (id, value) => { document.getElementById(id).textContent = value; };
+function renderSummary(months, data) {
+    const selected = data.filter(item => months.includes(item.month));
+    const income = selected.reduce((total, item) => total + item.income, 0);
+    const expense = selected.reduce((total, item) => total + item.expense, 0);
+    text('analyticsIncome', formatRupiah(income));
+    text('analyticsExpense', formatRupiah(expense));
+    text('analyticsBalance', formatRupiah(income - expense));
+}
+function renderTrend(months, data) {
+    const container = document.getElementById('cashflowChartArea');
+    container.replaceChildren();
+    const records = months.map(month => data.find(item => item.month === month) || {month, income: 0, expense: 0});
+    const max = Math.max(1, ...records.flatMap(item => [item.income, item.expense]));
+    if (records.every(item => !item.income && !item.expense)) {
+        container.append(node('p', 'analytics-empty', 'Belum ada cashflow pada periode ini.'));
+        return;
+    }
+    const chart = node('div', 'cashflow-chart');
+    chart.style.gridTemplateColumns = `repeat(${months.length}, minmax(0, 1fr))`;
+    const dense = months.length > 6;
+    chart.classList.toggle('cashflow-dense', dense);
+    records.forEach((item, index) => {
+        const group = node('div', 'cashflow-month');
+        group.tabIndex = 0;
+        const label = `${monthLabel(item.month, true)}. Pemasukan ${formatRupiah(item.income)}. Pengeluaran ${formatRupiah(item.expense)}.`;
+        group.setAttribute('role', 'img');
+        group.setAttribute('aria-label', label);
+        group.title = label;
+        const bars = node('div', 'cashflow-bars');
+        for (const [kind, name] of [['income', 'Pemasukan'], ['expense', 'Pengeluaran']]) {
+            const bar = node('div', 'cashflow-bar ' + kind + '-bar');
+            bar.style.height = `${Math.max(0, Math.min(100, item[kind] / max * 100))}%`;
+            bar.title = name + ': ' + formatRupiah(item[kind]);
+            bars.append(bar);
+        }
+        const monthText = new Date(item.month + '-01T00:00:00').toLocaleDateString('id-ID', {month: 'short'});
+        const tick = node('span', 'cashflow-month-label', monthText);
+        tick.setAttribute('aria-hidden', 'true');
+        if (dense && index % 2 === 1 && index !== months.length - 1) tick.classList.add('cashflow-tick-muted');
+        group.append(bars, tick);
+        group.addEventListener('click', () => text('cashflowDetail', label));
+        group.addEventListener('focus', () => text('cashflowDetail', label));
+        chart.append(group);
+    });
+    container.append(node('p', 'analytics-muted cashflow-scale', 'Skala maksimum ' + formatRupiah(max)), chart,
+        Object.assign(node('p', 'analytics-muted cashflow-detail', 'Ketuk bulan untuk melihat nominal.'), {id: 'cashflowDetail'}));
+}
+const categoryIcons = {'Makan & Minum': '☕', 'Transportasi': '↗', 'Belanja': '▣', 'Tagihan & Utilitas': 'ϟ',
+    'Tempat Tinggal': '⌂', 'Kesehatan': '+', 'Pendidikan': '▤', 'Hiburan & Lifestyle': '♫',
+    'Langganan & Digital': '▣', 'Keuangan & Cicilan': '↔', 'Rokok & Vape': '≈', 'Lainnya': '•••'};
+function renderCategories(data, period) {
+    const list = document.getElementById('categoriesList');
+    list.replaceChildren();
+    const ordinary = data.categories.filter(item => !['Perlu ditinjau', '__remaining__'].includes(item.category));
+    ordinary.sort((a, b) => b.total - a.total);
+    const total = ordinary.reduce((sum, item) => sum + item.total, 0);
+    const colors = ['#88b9a4', '#8baec7', '#b9a5c9', '#c6b186', '#b88991', '#8eb4b6'];
+    ordinary.forEach((item, index) => {
+        const share = total > 0 ? item.total / total * 100 : 0;
+        const row = node('button', 'category-ranking-row category-drill-trigger');
+        row.type = 'button';
+        row.addEventListener('click', () => openCategoryTransactions(item.category, {start: period.start, end: period.end}));
+        const icon = node('span', 'category-ranking-icon', categoryIcons[item.category] || '◈');
+        icon.setAttribute('aria-hidden', 'true');
+        icon.style.color = colors[index % colors.length];
+        const name = node('span', 'analytics-category-name', item.category);
+        const amount = node('strong', 'categories-amount', formatRupiah(item.total));
+        const percent = node('span', 'categories-percent', share.toLocaleString('id-ID', {maximumFractionDigits: 1}) + '%');
+        const track = node('span', 'category-track');
+        track.setAttribute('aria-hidden', 'true');
+        const fill = node('span');
+        fill.style.width = `${Math.max(0, Math.min(100, share))}%`;
+        fill.style.backgroundColor = colors[index % colors.length];
+        track.append(fill);
+        row.append(icon, name, amount, track, percent);
+        list.append(row);
+    });
+    text('categoriesStatus', ordinary.length ? '' : 'Belum ada pengeluaran terklasifikasi pada periode ini.');
+}
+function renderComparison(data, currentMonth) {
+    const target = document.getElementById('monthlyComparisonList');
+    target.replaceChildren();
+    const current = data.find(item => item.month === currentMonth);
+    const previousMonth = shiftMonth(currentMonth, -1);
+    const previous = data.find(item => item.month === previousMonth);
+    text('monthlyComparisonPeriod', `${monthLabel(currentMonth)} vs ${monthLabel(previousMonth)} · bulan berjalan dibanding bulan sebelumnya`);
+    if (!current || !previous) {
+        target.append(node('p', 'analytics-empty', 'Data dua bulan belum cukup untuk dibandingkan.'));
+        return;
+    }
+    for (const [kind, label] of [['income', 'Pemasukan'], ['expense', 'Pengeluaran']]) {
+        const highlight = node('div', 'comparison-highlight');
+        if (!previous[kind]) {
+            highlight.append(node('span', 'analytics-muted', label + ': belum ada nilai pembanding.'));
+        } else {
+            const change = (current[kind] - previous[kind]) / previous[kind] * 100;
+            const percentage = (change > 0 ? '+' : '') + change.toLocaleString('id-ID', {maximumFractionDigits: 1}) + '%';
+            const direction = change > 0 ? 'meningkat' : change < 0 ? 'menurun' : 'tetap';
+            highlight.append(node('strong', '', percentage), node('span', 'analytics-muted', label + ' ' + direction));
+        }
+        target.append(highlight);
+    }
+}
+function monthlyInsights(monthly, categories, period) {
+    const insights = [];
+    // The ranking is for the selected range: never label a multi-month share
+    // as a current-month fact, and never fetch extra data just for this copy.
+    if (period.months.length === 1) {
+        const ordinary = categories.categories.filter(item =>
+            !['Perlu ditinjau', '__remaining__'].includes(item.category) && Number.isFinite(item.total) && item.total > 0);
+        const total = ordinary.reduce((sum, item) => sum + item.total, 0);
+        const largest = [...ordinary].sort((a, b) => b.total - a.total)[0];
+        if (largest && total > 0) {
+            const percent = (largest.total / total * 100).toLocaleString('id-ID', {maximumFractionDigits: 1});
+            insights.push(`${largest.category} merupakan kategori terbesar: ${percent}% dari pengeluaran terklasifikasi bulan ini.`);
         }
     }
-    retry.addEventListener('click', load);
-    month.addEventListener('change', load);
-    document.getElementById('categoriesAllTime').addEventListener('click', () => { month.value = ''; load(); });
-    return load;
-}
-
-function setupPeriodReport() {
-    const period = document.getElementById('reportsPeriod');
-    const custom = document.getElementById('reportsCustom');
-    const start = document.getElementById('reportsStart');
-    const end = document.getElementById('reportsEnd');
-    const content = document.getElementById('reportsContent');
-    const status = document.getElementById('reportsStatus');
-    const retry = document.getElementById('reportsRetry');
-    let requestNumber = 0;
-    const today = new Date();
-    const iso = value => `${value.getFullYear()}-${String(value.getMonth()+1).padStart(2,'0')}-${String(value.getDate()).padStart(2,'0')}`;
-    start.value = iso(new Date(today.getFullYear(), today.getMonth(), 1));
-    end.value = iso(today);
-    const displayDate = value => new Date(value + 'T00:00:00').toLocaleDateString('id-ID', {day:'numeric',month:'short',year:'numeric'});
-    const range = (a,b) => `${displayDate(a)} – ${displayDate(b)}`;
-    const number = value => Number(value).toLocaleString('id-ID', {maximumFractionDigits:2});
-    function text(id, value) { document.getElementById(id).textContent = value; }
-    async function load() {
-        const current = ++requestNumber;
-        content.hidden = true;
-        retry.hidden = true;
-        if (period.value === 'custom' && (!start.value || !end.value || start.value > end.value)) {
-            status.textContent = 'Pilih rentang tanggal yang valid.';
-            return;
-        }
-        status.textContent = 'Memuat laporan…';
-        const query = new URLSearchParams({period: period.value});
-        if (period.value === 'custom') { query.set('start',start.value); query.set('end',end.value); }
-        try {
-            const response = await apiFetch('/api/reports?' + query);
-            if (!response.ok) throw new Error('Report request failed');
-            const data = await response.json();
-            if (current !== requestNumber) return;
-            text('reportsIncome',formatRupiah(data.income));
-            text('reportsExpense',formatRupiah(data.expense));
-            text('reportsBalance',formatRupiah(data.balance));
-            text('reportsActivePeriod',range(data.start,data.end));
-            text('reportsAverage','Rp' + number(data.average_daily_expense));
-            text('reportsCount',number(data.transaction_count));
-            text('reportsAverageNote',`Rata-rata dibagi ${data.days} hari kalender, termasuk hari tanpa transaksi. Bulan ini dihitung sampai hari ini.`);
-            const comparison = data.comparison;
-            if (comparison.change_percentage === null) {
-                text('reportsInsight','Belum ada pengeluaran pada periode pembanding untuk menghitung perubahan.');
-            } else {
-                const change = comparison.change_percentage;
-                text('reportsInsight', change === 0 ? 'Pengeluaran sama dengan periode pembanding.' : `Pengeluaran ${change > 0 ? 'naik' : 'turun'} ${number(Math.abs(change))}% dibanding periode sebelumnya.`);
-            }
-            text('reportsComparisonPeriod',`Pembanding: ${range(comparison.start,comparison.end)} (${data.days} hari), pengeluaran ${formatRupiah(comparison.expense)}.`);
-            const list = document.getElementById('reportsCategories');
-            list.replaceChildren();
-            const ordinaryReportTotal = data.categories.filter(item => item.category !== 'Perlu ditinjau').reduce((sum, item) => sum + Number(item.total), 0);
-            [...data.categories].sort((a, b) => Number(b.category === 'Perlu ditinjau') - Number(a.category === 'Perlu ditinjau')).forEach(item => {
-                const row = document.createElement('button');
-                row.type = 'button';
-                row.className = 'reports-category-row category-drill-trigger';
-                row.addEventListener('click', () => openCategoryTransactions(item.category, {start: data.start, end: data.end, ...(item.category === 'Perlu ditinjau' ? {review: '1'} : {})}));
-                if (item.category === 'Perlu ditinjau') row.classList.add('category-review-badge');
-                const name = document.createElement('strong');
-                name.textContent = item.category;
-                const total = document.createElement('strong');
-                total.className = 'reports-category-amount';
-                total.textContent = formatRupiah(item.total);
-                const percentage = document.createElement('span');
-                percentage.textContent = item.category === 'Perlu ditinjau' ? 'Perlu pemeriksaan' : number(ordinaryReportTotal ? Number(item.total) / ordinaryReportTotal * 100 : 0) + '%';
-                row.append(name,total,percentage);
-                list.appendChild(row);
-            });
-            if (!data.categories.length) { const empty = document.createElement('p'); empty.className='reports-muted'; empty.textContent='Belum ada pengeluaran pada periode ini.'; list.appendChild(empty); }
-            status.textContent = data.transaction_count ? '' : 'Belum ada transaksi pada periode ini.';
-            content.hidden = false;
-        } catch (error) {
-            if (current !== requestNumber) return;
-            status.textContent = 'Gagal memuat laporan. Silakan coba lagi.';
-            retry.hidden = false;
+    const current = monthly.find(item => item.month === period.current);
+    const previous = monthly.find(item => item.month === shiftMonth(period.current, -1));
+    for (const [kind, label] of [['income', 'Pemasukan'], ['expense', 'Pengeluaran']]) {
+        if (!current || !previous || !Number.isFinite(current[kind]) || current[kind] < 0
+                || !Number.isFinite(previous[kind]) || previous[kind] <= 0) continue;
+        const change = (current[kind] - previous[kind]) / previous[kind] * 100;
+        if (change === 0) {
+            insights.push(`${label} bulan berjalan sama dengan bulan lalu.`);
+        } else {
+            const percent = Math.abs(change).toLocaleString('id-ID', {maximumFractionDigits: 1});
+            insights.push(`${label} bulan berjalan ${change > 0 ? 'meningkat' : 'menurun'} ${percent}% dibanding bulan lalu.`);
         }
     }
-
-    period.addEventListener('change',()=>{custom.hidden=period.value!=='custom';start.required=end.required=!custom.hidden;load();});
-    document.getElementById('reportsFilters').addEventListener('submit',event=>{event.preventDefault();load();});
-    retry.addEventListener('click',load);
-    return load;
+    return insights.slice(0, 3);
 }
-
-const loadCategory = setupCategoryBreakdown();
-const loadReport = setupPeriodReport();
-window.loadAnalytics = () => Promise.all([loadMonthly(), loadCategory(), loadReport()]);
-document.getElementById('analyticsPeriod').addEventListener('change', loadMonthly);
-document.getElementById('analyticsRetry').addEventListener('click', window.loadAnalytics);
-window.loadAnalytics();
+function renderInsights(monthly, categories, period) {
+    const insights = monthlyInsights(monthly, categories, period);
+    document.getElementById('analyticsInsightsList').replaceChildren(
+        ...insights.map(value => node('li', '', value)));
+    document.getElementById('analyticsInsights').hidden = !insights.length;
+}
+function renderReviews(data, period) {
+    const section = document.getElementById('analyticsReview');
+    const actions = document.getElementById('analyticsReviewActions');
+    actions.replaceChildren();
+    const items = data.items.filter(item => item.count > 0 && ['expense', 'income'].includes(item.type));
+    section.hidden = !items.length;
+    text('analyticsReviewCount', items.reduce((sum, item) => sum + item.count, 0) + ' transaksi belum terklasifikasi');
+    for (const item of items) {
+        const button = node('button', 'category-review-badge', `Tinjau ${item.count} ${item.type === 'income' ? 'pemasukan' : 'pengeluaran'} →`);
+        button.type = 'button';
+        button.addEventListener('click', () => openCategoryTransactions('Perlu ditinjau', {start: period.start, end: period.end, review: '1'}, item.type));
+        actions.append(button);
+    }
+}
+async function loadAnalytics() {
+    const request = ++analyticsRequest;
+    const period = selectedPeriod();
+    const query = new URLSearchParams({start: period.start, end: period.end});
+    text('analyticsRange', period.months.length === 1 ? monthLabel(period.current, true) : `${monthLabel(period.months[0])} – ${monthLabel(period.current)}`);
+    text('analyticsStatus', 'Memuat analitik…');
+    document.getElementById('analyticsRetry').hidden = true;
+    document.getElementById('analyticsReview').hidden = true;
+    document.getElementById('analyticsInsights').hidden = true;
+    document.getElementById('analyticsInsightsList').replaceChildren();
+    for (const id of ['analyticsIncome', 'analyticsExpense', 'analyticsBalance']) text(id, '—');
+    for (const id of ['cashflowChartArea', 'categoriesList', 'monthlyComparisonList', 'monthlyComparisonPeriod', 'categoriesStatus']) text(id, '');
+    try {
+        const [monthly, categories, reviews] = await Promise.all([
+            '/api/analytics/monthly', '/api/categories/breakdown?' + query, '/api/categories/review?' + query
+        ].map(async url => {
+            const response = await apiFetch(url);
+            if (!response.ok) throw new Error('Analytics request failed');
+            return response.json();
+        }));
+        if (request !== analyticsRequest) return;
+        renderSummary(period.months, monthly);
+        renderTrend(period.months, monthly);
+        renderCategories(categories, period);
+        renderComparison(monthly, period.current);
+        renderInsights(monthly, categories, period);
+        renderReviews(reviews, period);
+        text('analyticsStatus', '');
+    } catch (_) {
+        if (request !== analyticsRequest) return;
+        text('analyticsStatus', 'Gagal memuat analitik. Silakan coba lagi.');
+        document.getElementById('analyticsRetry').hidden = false;
+    }
+}
+window.loadAnalytics = loadAnalytics;
+document.getElementById('analyticsPeriod').addEventListener('change', loadAnalytics);
+document.getElementById('analyticsRetry').addEventListener('click', loadAnalytics);
+loadAnalytics();
 })();

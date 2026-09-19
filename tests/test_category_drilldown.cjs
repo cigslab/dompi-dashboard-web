@@ -4,7 +4,7 @@ const vm = require('node:vm');
 const path = require('node:path');
 const root = path.join(__dirname, '..');
 const source = fs.readFileSync(path.join(root, 'static/analytics.js'), 'utf8');
-const fn = source.slice(source.indexOf('function openCategoryTransactions'), source.indexOf('                function shiftMonth'));
+const fn = source.slice(source.indexOf('function openCategoryTransactions'), source.indexOf('function shiftMonth'));
 class Element {
   constructor(tag) { this.tag=tag; this.children=[]; this.events={}; this.disabled=false; }
   append(...items) { this.children.push(...items); }
@@ -48,9 +48,8 @@ const flush=()=>new Promise(resolve=>setImmediate(resolve));
   const html=fs.readFileSync(path.join(root,'templates/dashboard.html'),'utf8');
   assert.match(html,/category: "Kategori lain",\s+bucket_id: "__remaining__"/);
   assert.doesNotMatch(html,/category: "Lainnya",/);
-  assert.match(source,/openCategoryTransactions\(item.category, \{month: month.value\}\)/);
-  assert.match(source,/start: data.start, end: data.end/);
-  assert.match(source,/filter\(item => item.category !== 'Perlu ditinjau'\)/);
+  assert.match(source,/openCategoryTransactions\(item.category, \{start: period.start, end: period.end\}\)/);
+  assert.match(source,/\['Perlu ditinjau', '__remaining__'\]/);
   assert.match(source,/review: '1'/);
   assert.doesNotMatch(source,/__needs_category_review__/);
   const css=fs.readFileSync(path.join(root,'static/style.css'),'utf8');
