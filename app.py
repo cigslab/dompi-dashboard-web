@@ -1,3 +1,4 @@
+from type_review import fingerprint, needs_review, suspected_mismatch
 from export_ticket import ExportTickets, TTL_SECONDS
 from transaction_export import period_bounds, render_csv
 from plan_contract import Capabilities, resolve_capabilities
@@ -5,7 +6,7 @@ from checkout_policy import checkout_allowed
 import checkout_midtrans
 from lifetime_checkout import CheckoutError, offers, reserve_order
 from entitlement_reader import read_entitlement, entitlement_status
-from category_resolver import category_sql, RESOLVER_VERSION, REVIEW_MARKER
+from category_resolver import category_sql, RESOLVER_VERSION, REVIEW_MARKER, EXPENSE_LABELS, INCOME_LABELS
 import os
 from rupiah import parse_idr_amount, IDR_ONLY_MESSAGE
 import hashlib
@@ -1013,8 +1014,11 @@ def update_transaction(transaction_id):
                 params.append(fields[key] or '')
         assignments = []
         if changes:
-            assignments.append('analytics_category = CASE WHEN ' + ' OR '.join(changes) + ' THEN %s ELSE analytics_category END')
-            params.append(REVIEW_MARKER)
+            assignments.append('type_review_confirmed_fingerprint = CASE WHEN ' + ' OR '.join(changes) + ' THEN NULL ELSE type_review_confirmed_fingerprint END')
+        if 'type' in fields:
+            invalid = EXPENSE_LABELS if fields['type'] == 'income' else INCOME_LABELS
+            assignments.append("analytics_category = CASE WHEN analytics_category IN (" + ','.join(['%s'] * len(invalid)) + ") THEN 'Lainnya' ELSE analytics_category END")
+            params.extend(invalid)
         for key, value in fields.items():
             assignments.append(f'{key} = %s')
             params.append(value)
@@ -1054,6 +1058,64 @@ def update_transaction(transaction_id):
 
         if conn:
             conn.close()
+
+@app.route('/api/transactions/type-review')
+def type_review_list():
+    try:
+        period_sql, period_params = category_period_filter()
+        page = int(request.args.get('page', '1'))
+        if page < 1:
+            raise ValueError()
+    except (ValueError, TypeError):
+        return jsonify(message='Periode atau halaman tidak valid.'), 400
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("SELECT transaction_id, category, note, type, date, amount, type_review_confirmed_fingerprint FROM expenses WHERE user_id = %s AND currency = 'IDR' AND " + period_sql + " ORDER BY date DESC, transaction_id DESC", (g.user_id, *period_params))
+            items = []
+            for tid, description, note, kind, day, amount, confirmed in cursor.fetchall():
+                if needs_review(kind, description, note, confirmed):
+                    items.append(dict(transaction_id=tid, description=description, note=note,
+                                      type=kind, date=day, amount=integer_amount(amount),
+                                      fingerprint=fingerprint(kind, description, note)))
+        offset = (page - 1) * 25
+        return jsonify(items=items[offset:offset + 25], count=len(items), page=page,
+                       has_more=offset + 25 < len(items))
+    finally:
+        conn.close()
+
+
+@app.route('/api/transactions/<int:transaction_id>/type-review/confirm', methods=['POST'])
+def confirm_type_review(transaction_id):
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict) or set(body) != {'fingerprint'} or not isinstance(body['fingerprint'], str):
+        return jsonify(message='Konfirmasi tidak valid.'), 400
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT type, category, note FROM expenses WHERE user_id = %s AND transaction_id = %s AND currency = 'IDR'", (g.user_id, transaction_id))
+        row = cursor.fetchone()
+        if row is None:
+            return jsonify(message='Transaksi tidak ditemukan.'), 404
+        kind, description, note = row
+        current = fingerprint(kind, description, note)
+        if body['fingerprint'] != current or not suspected_mismatch(kind, description, note):
+            return jsonify(message='Transaksi berubah. Muat ulang sebelum konfirmasi.'), 409
+        # Compare-and-set: concurrent semantic edits cannot confirm unseen context.
+        # This UPDATE locks the row and PostgreSQL rechecks the WHERE after waiting.
+        cursor.execute("UPDATE expenses SET type_review_confirmed_fingerprint = %s WHERE user_id = %s AND transaction_id = %s AND currency = 'IDR' AND type = %s AND COALESCE(category, '') = %s AND COALESCE(note, '') = %s", (current, g.user_id, transaction_id, kind, description or '', note or ''))
+        if cursor.rowcount != 1:
+            conn.rollback()
+            return jsonify(message='Transaksi berubah. Muat ulang sebelum konfirmasi.'), 409
+        conn.commit()
+        return jsonify(success=True)
+    except Exception:
+        conn.rollback()
+        return jsonify(message='Gagal mengonfirmasi transaksi.'), 500
+    finally:
+        cursor.close()
+        conn.close()
+
 
 @app.route("/health")
 def health():

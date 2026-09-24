@@ -61,6 +61,12 @@ class MemoryCursor:
         query = query.replace("TO_CHAR(date::timestamp, 'YYYY-MM')", "strftime('%Y-%m', date)")
         return self.cursor.execute(query, params)
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        self.cursor.close()
+
     def __getattr__(self, name):
         return getattr(self.cursor, name)
 
@@ -132,7 +138,7 @@ class DashboardAuthTests(unittest.TestCase):
         self.db.execute('CREATE TABLE monthly_usage (user_id BIGINT, month TEXT, expense_count INTEGER, PRIMARY KEY(user_id, month))')
         self.db.execute('CREATE TABLE users (telegram_id BIGINT PRIMARY KEY, first_name TEXT, username TEXT, plan TEXT, pro_until TEXT, joined_at TEXT)')
         self.db.executemany('INSERT INTO users (telegram_id, first_name, username) VALUES (?,?,?)', [(101, 'Nama A', 'user_a'), (202, 'Nama B', 'user_b')])
-        self.db.execute('CREATE TABLE expenses (user_id INTEGER, transaction_id INTEGER, category TEXT, analytics_category TEXT, amount BIGINT, note TEXT, date TEXT, type TEXT, currency TEXT, id ' + ('BIGSERIAL PRIMARY KEY' if dsn else 'INTEGER PRIMARY KEY AUTOINCREMENT') + ')')
+        self.db.execute('CREATE TABLE expenses (user_id INTEGER, transaction_id INTEGER, category TEXT, analytics_category TEXT, amount BIGINT, note TEXT, date TEXT, type TEXT, currency TEXT, type_review_confirmed_fingerprint TEXT, id ' + ('BIGSERIAL PRIMARY KEY' if dsn else 'INTEGER PRIMARY KEY AUTOINCREMENT') + ')')
         self.db.executemany('INSERT INTO expenses (user_id, transaction_id, category, analytics_category, amount, note, date, type, currency) VALUES (?,?,?,?,?,?,?,?,?)', [
             (101, 1, 'A expense', 'Food', 10, 'A', '2026-09-14', 'expense', 'IDR'),
             (101, 2, 'A income', 'Salary', 100, 'A', '2026-09-14', 'income', 'IDR'),

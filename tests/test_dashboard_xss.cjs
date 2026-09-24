@@ -45,6 +45,7 @@ function setup(attack) {
     else if(pathname==='/api/account') { if(window.__accountError) return new Response('{}',{status:500}); data={entitlement:window.__accountEntitlement??{effective_plan:window.__unknownAccount?null:(window.__accountPlan||'free'),entitlement_source:window.__unknownAccount?null:(window.__accountPlan==='pro'?'pro_lifetime':'free'),requires_review:!!window.__unknownAccount,lifetime:window.__accountPlan==='pro',legacy_expires_at:null},plan:window.__unknownAccount?null:(window.__accountPlan||'free'),monthly_usage:window.__unknownAccount?null:(window.__accountUsage??37),usage_month:month,joined_at:window.__accountJoined??'2026-09-07',free_monthly_limit:window.__accountLimit??null}; }
     else if(pathname==='/api/export/transactions') { await new Promise(r=>setTimeout(r,100)); return new Response('date,type,description,analytics_category,amount,note\r\n',{status:window.__exportError?500:200,headers:{'Content-Type':'text/csv; charset=utf-8','Content-Disposition':'attachment; filename="dompi-export-2026-09-19.csv"'}}); }
     else if(pathname==='/api/transactions/reset') { if(options.method==='DELETE') { await new Promise(r=>setTimeout(r,100)); data={success:true}; } else data={count:4,token:'test-reset-token'}; }
+    else if(pathname.endsWith('/type-review/confirm')) { window.__typeReviewFixture={items:[],count:0,has_more:false}; data={success:true}; }
     else if(options.method&&options.method!=='GET') data={success:true};
     else if(pathname==='/api/categories/breakdown') {
       if(window.__analyticsError) return new Response('{}',{status:500});
@@ -61,6 +62,7 @@ function setup(attack) {
     else if(pathname==='/api/cashflow') data=[{date,income:2000,expense:8000}];
     else if(pathname==='/api/categories') data=texts.map((category,i)=>({category,total:1000*(i+1)}));
     else if(pathname==='/api/analytics/monthly') { if(window.__monthlyError) return new Response('{}',{status:500}); data=window.__monthlyEmpty?[]:[{month,income:200000,expense:800000,transaction_count:attack?payloads[0]:24}]; if(window.__previousActivity){ const previous=new Date(now.getFullYear(),now.getMonth()-1,1); data=[{month,income:0,expense:0,transaction_count:0},{month:`${previous.getFullYear()}-${String(previous.getMonth()+1).padStart(2,'0')}`,income:10,expense:10,transaction_count:1}]; } }
+    else if(pathname==='/api/transactions/type-review') data=window.__typeReviewFixture||{items:[],count:0,has_more:false};
     else if(pathname==='/api/categories/review') data={items:[]};
     else if(pathname==='/api/categories/transactions') data={items:[],has_more:false};
     else if(pathname==='/api/transactions') data=transactions;
@@ -339,6 +341,39 @@ async function runInsightTests(index,attack) {
   await window.__reportFetch('/results',{method:'POST',body:JSON.stringify(result)});
   const report=document.createElement('pre');report.id='xssTestResults';report.style.cssText='white-space:pre-wrap;overflow-wrap:anywhere';report.textContent=JSON.stringify(result);document.body.prepend(report);
 }
+// Focused mismatch/confirmation browser check: /0?type-review=1.
+async function runTypeReviewTests() {
+  let checks=0,result;
+  const check=(ok,label)=>{if(!ok)throw Error(label);checks++;};
+  const wait=()=>new Promise(r=>setTimeout(r,30));
+  try {
+    const payload='<img src=x onerror="window.__dompiXss=1">';
+    window.__typeReviewFixture={count:1,has_more:false,items:[{transaction_id:1,type:'expense',description:payload,note:payload.repeat(6),amount:5000,date:'2026-09-01',fingerprint:'mock-server-fingerprint'}]};
+    document.getElementById('analyticsMenu').click();await window.loadAnalytics();
+    const section=document.getElementById('analyticsTypeReview');
+    check(!section.hidden,'mismatch visible');
+    check(section.textContent.includes('1 transaksi perlu diperiksa'),'review copy');
+    section.querySelector('button').click();
+    for(let i=0;i<50&&!document.querySelector('.category-drill article');i++)await wait();
+    const dialog=document.querySelector('.category-drill');
+    check(dialog.open,'dialog open');
+    check(dialog.textContent.includes(payload)&&!dialog.querySelector('img'),'XSS safe text');
+    check(dialog.textContent.includes('Perbaiki transaksi'),'edit CTA');
+    check(dialog.scrollWidth<=dialog.clientWidth,'dialog no overflow');
+    check(document.documentElement.scrollWidth<=innerWidth,'page no overflow');
+    [...dialog.querySelectorAll('button')].find(b=>b.textContent==='Sudah benar').click();
+    for(let i=0;i<50&&document.querySelector('.category-drill');i++)await wait();
+    check(!document.querySelector('.category-drill'),'empty dialog closed');
+    check(section.hidden,'zero mismatch hides section');
+    await window.loadAnalytics();check(section.hidden,'reload stays hidden');
+    const call=window.__testCalls.find(c=>c.path.endsWith('/type-review/confirm'));
+    check(call.method==='POST'&&JSON.parse(call.body).fingerprint==='mock-server-fingerprint','confirmation request');
+    check(window.__dompiXss===0&&window.__testErrors.length===0,'no XSS or script error');
+    result={scope:'type-review',pass:true,checks,width:innerWidth};
+  } catch(error) {result={scope:'type-review',pass:false,checks,error:String(error),width:innerWidth};}
+  await window.__reportFetch('/results',{method:'POST',body:JSON.stringify(result)});
+  const report=document.createElement('pre');report.id='xssTestResults';report.style.cssText='white-space:pre-wrap;overflow-wrap:anywhere';report.textContent=JSON.stringify(result);document.body.prepend(report);
+}
 http.createServer((req,res)=>{
  const url=new URL(req.url,'http://127.0.0.1');
  if(url.pathname==='/results'){
@@ -358,6 +393,6 @@ http.createServer((req,res)=>{
  html=html.replace('href="../static/style.css"',`href="/static/style.css?index=${index}"`);
  html=html.replace('<head>','<head><script>('+setup.toString()+')('+attack+');</script>');
  html=html.replace('</body>','<script>window.analyticsChecks='+require('./test_analytics_ui.cjs').toString()+';</script></body>');
- html=html.replace('</body>','<script>('+(url.searchParams.get('insights')==='1'?runInsightTests:url.searchParams.get('analytics')==='1'?runAnalyticsTests:url.searchParams.get('export')==='1'?runExportTests:runTests).toString()+')('+index+','+attack+');</script></body>');
+ html=html.replace('</body>','<script>('+(url.searchParams.get('type-review')==='1'?runTypeReviewTests:url.searchParams.get('insights')==='1'?runInsightTests:url.searchParams.get('analytics')==='1'?runAnalyticsTests:url.searchParams.get('export')==='1'?runExportTests:runTests).toString()+')('+index+','+attack+');</script></body>');
  res.setHeader('Content-Type','text/html');res.end(html);
 }).listen(8765,'127.0.0.1',()=>console.log('Dashboard tests: http://127.0.0.1:8765/0; add ?normal=1 for normal-data regression.'));

@@ -20,7 +20,7 @@ module.exports = async function analyticsChecks(attack) {
     eq([...el('categoriesList').querySelectorAll('.analytics-category-name')].map(e=>e.textContent),[payload,'Lainnya'],'rank excludes review and bucket');
     eq([...el('categoriesList').querySelectorAll('.categories-percent')].map(e=>e.textContent),['66,7%','33,3%'],'ordinary percentages');
     eq(el('analyticsReview').hidden,false,'review visible');
-    eq(el('analyticsReviewCount').textContent,'1 transaksi belum terklasifikasi','review count');
+    eq(el('analyticsReviewCount').textContent,'1 transaksi dengan kategori perlu diperiksa','review count');
     eq(el('analyticsPage').textContent.includes('__remaining__'),false,'no raw bucket');
     eq(el('analyticsPage').textContent.includes('__needs_category_review__'),false,'no raw review marker');
     eq(el('analyticsPage').querySelectorAll('img,svg[onload]').length,0,'no injected markup');

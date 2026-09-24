@@ -9,7 +9,7 @@ ALIASES = {'Tagihan': 'Tagihan & Utilitas', 'Hiburan': 'Hiburan & Lifestyle',
            'Keuangan': 'Keuangan & Cicilan'}
 
 
-# This reserved stored marker means semantic context changed, not model failure.
+# Technical classifier failures and legacy review states; never mismatch confirmation.
 REVIEW_MARKER = '__needs_category_review__'
 REVIEW_LABEL = 'Perlu ditinjau'
 EXPENSE_LABELS = ('Makan & Minum', 'Transportasi', 'Belanja', 'Tagihan & Utilitas',

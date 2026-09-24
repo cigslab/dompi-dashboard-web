@@ -34,28 +34,57 @@ function openCategoryTransactions(category, period, kind = 'expense') {
         status.textContent = 'Memuat transaksi…';
         try {
             const query = new URLSearchParams({...period, category, type: kind, page: String(target)});
-            const response = await apiFetch('/api/categories/transactions?' + query);
+            const response = await apiFetch((kind === 'mismatch' ? '/api/transactions/type-review?' : '/api/categories/transactions?') + query);
             if (!response.ok) throw new Error('Drill-down failed');
             const data = await response.json();
             if (closed || current !== request) return;
             page = target;
             for (const item of data.items) {
                 const row = document.createElement('article');
-                for (const value of [item.description || '—', item.date, formatRupiah(item.amount), item.note || '—', item.category]) {
+                for (const value of [item.description || '—', item.date, formatRupiah(item.amount), item.note || '—', kind === 'mismatch' ? (item.type === 'income' ? 'Jenis: Pemasukan' : 'Jenis: Pengeluaran') : item.category]) {
                     const text = document.createElement('p');
                     text.textContent = value;
                     row.append(text);
                 }
                 const edit = document.createElement('button');
                 edit.type = 'button';
-                edit.textContent = 'Edit transaksi';
+                edit.textContent = kind === 'mismatch' ? 'Perbaiki transaksi' : 'Edit transaksi';
                 edit.addEventListener('click', () => {
                     dialog.close();
                     openTransactionEditor({...item, type: item.type || kind});
                 });
                 row.append(edit);
+                if (kind === 'mismatch') {
+                    const confirm = document.createElement('button');
+                    confirm.type = 'button';
+                    confirm.textContent = 'Sudah benar';
+                    confirm.addEventListener('click', async () => {
+                        if (confirm.disabled) return;
+                        confirm.disabled = edit.disabled = true;
+                        status.textContent = 'Menyimpan konfirmasi…';
+                        try {
+                            const result = await apiFetch(`/api/transactions/${item.transaction_id}/type-review/confirm`, {
+                                method: 'POST', headers: {'Content-Type': 'application/json'},
+                                body: JSON.stringify({fingerprint: item.fingerprint})
+                            });
+                            if (!result.ok) throw new Error('Confirmation failed');
+                            row.remove();
+                            await window.loadAnalytics();
+                            if (!closed) await load(page);
+                        } catch (_) {
+                            if (closed) return;
+                            status.textContent = 'Gagal mengonfirmasi. Muat ulang atau coba lagi.';
+                            confirm.disabled = edit.disabled = false;
+                            retry.hidden = false;
+                            retry.onclick = () => load(page);
+                        }
+                    });
+                    row.append(confirm);
+                }
                 list.append(row);
             }
+            if (kind === 'mismatch' && data.count === 0) { dialog.close(); return; }
+            if (kind === 'mismatch' && !data.items.length && page > 1) { await load(page - 1); return; }
             status.textContent = data.items.length ? `Halaman ${page}` : 'Tidak ada transaksi pada halaman ini.';
             previous.disabled = page <= 1;
             next.disabled = !data.has_more;
@@ -243,11 +272,24 @@ function renderReviews(data, period) {
     actions.replaceChildren();
     const items = data.items.filter(item => item.count > 0 && ['expense', 'income'].includes(item.type));
     section.hidden = !items.length;
-    text('analyticsReviewCount', items.reduce((sum, item) => sum + item.count, 0) + ' transaksi belum terklasifikasi');
+    text('analyticsReviewCount', items.reduce((sum, item) => sum + item.count, 0) + ' transaksi dengan kategori perlu diperiksa');
     for (const item of items) {
         const button = node('button', 'category-review-badge', `Tinjau ${item.count} ${item.type === 'income' ? 'pemasukan' : 'pengeluaran'} →`);
         button.type = 'button';
         button.addEventListener('click', () => openCategoryTransactions('Perlu ditinjau', {start: period.start, end: period.end, review: '1'}, item.type));
+        actions.append(button);
+    }
+}
+function renderTypeReviews(data, period) {
+    const section = document.getElementById('analyticsTypeReview');
+    const actions = document.getElementById('analyticsTypeReviewActions');
+    actions.replaceChildren();
+    section.hidden = !(data.count > 0);
+    text('analyticsTypeReviewCount', `${data.count} transaksi perlu diperiksa`);
+    if (data.count > 0) {
+        const button = node('button', 'category-review-badge', 'Periksa transaksi →');
+        button.type = 'button';
+        button.addEventListener('click', () => openCategoryTransactions('Perlu ditinjau', {start: period.start, end: period.end}, 'mismatch'));
         actions.append(button);
     }
 }
@@ -259,13 +301,14 @@ async function loadAnalytics() {
     text('analyticsStatus', 'Memuat analitik…');
     document.getElementById('analyticsRetry').hidden = true;
     document.getElementById('analyticsReview').hidden = true;
+    document.getElementById('analyticsTypeReview').hidden = true;
     document.getElementById('analyticsInsights').hidden = true;
     document.getElementById('analyticsInsightsList').replaceChildren();
     for (const id of ['analyticsIncome', 'analyticsExpense', 'analyticsBalance']) text(id, '—');
     for (const id of ['cashflowChartArea', 'categoriesList', 'monthlyComparisonList', 'monthlyComparisonPeriod', 'categoriesStatus']) text(id, '');
     try {
-        const [monthly, categories, reviews] = await Promise.all([
-            '/api/analytics/monthly', '/api/categories/breakdown?' + query, '/api/categories/review?' + query
+        const [monthly, categories, reviews, typeReviews] = await Promise.all([
+            '/api/analytics/monthly', '/api/categories/breakdown?' + query, '/api/categories/review?' + query, '/api/transactions/type-review?' + query
         ].map(async url => {
             const response = await apiFetch(url);
             if (!response.ok) throw new Error('Analytics request failed');
@@ -278,6 +321,7 @@ async function loadAnalytics() {
         renderComparison(monthly, period.current);
         renderInsights(monthly, categories, period);
         renderReviews(reviews, period);
+        renderTypeReviews(typeReviews, period);
         text('analyticsStatus', '');
     } catch (_) {
         if (request !== analyticsRequest) return;

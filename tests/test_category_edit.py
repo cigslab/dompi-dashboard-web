@@ -19,16 +19,16 @@ class EditCategoryTests(unittest.TestCase):
         data=self.request('GET','/api/categories',signed()).json
         self.assertEqual(data,[{'category':'Tagihan & Utilitas','total':30}])
 
-    def test_semantic_changes(self):
-        for body in [{'category':'ganti deskripsi'}, {'note':'ganti catatan'}, {'type':'income'}]:
-            self.db.execute("UPDATE expenses SET analytics_category='Makan & Minum' WHERE user_id=101 AND transaction_id=1")
+    def test_semantic_changes_do_not_create_technical_marker(self):
+        self.db.execute("UPDATE expenses SET analytics_category='Makan & Minum' WHERE user_id=101 AND transaction_id=1")
+        for body in [{'category':'ganti deskripsi'}, {'note':'ganti catatan'}]:
             self.assertEqual(self.request('PATCH','/api/transactions/1',signed(),json=body).status_code,200)
-            self.assertEqual(self.row()[5],REVIEW_MARKER)
-            self.assertEqual(self.row()[1],10)
-            self.assertEqual(resolve_category(self.row()[5],self.row()[3]),REVIEW_LABEL)
+            self.assertEqual(self.row()[5],'Makan & Minum')
+        self.assertEqual(self.request('PATCH','/api/transactions/1',signed(),json={'type':'income'}).status_code,200)
+        self.assertEqual(self.row()[5],'Lainnya')
+        self.db.execute("UPDATE expenses SET analytics_category=? WHERE user_id=101 AND transaction_id=1",(REVIEW_MARKER,))
         self.assertEqual(self.request('PATCH','/api/transactions/1',signed(),json={'type':'expense'}).status_code,200)
         self.assertEqual(self.row()[5],REVIEW_MARKER)
-        self.assertEqual(self.request('GET','/api/categories',signed()).json,[{'category':REVIEW_LABEL,'total':10}])
 
     def test_owner_auth_and_validation(self):
         before=self.row(202)
