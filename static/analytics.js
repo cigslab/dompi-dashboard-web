@@ -2,6 +2,7 @@
 let analyticsRequest = 0;
 
 function openCategoryTransactions(category, period, kind = 'expense') {
+    if (kind === 'mismatch') return openTypeReview(period);
     const dialog = document.createElement('dialog');
     dialog.className = 'category-drill';
     const title = document.createElement('h2');
@@ -34,57 +35,28 @@ function openCategoryTransactions(category, period, kind = 'expense') {
         status.textContent = 'Memuat transaksi…';
         try {
             const query = new URLSearchParams({...period, category, type: kind, page: String(target)});
-            const response = await apiFetch((kind === 'mismatch' ? '/api/transactions/type-review?' : '/api/categories/transactions?') + query);
+            const response = await apiFetch('/api/categories/transactions?' + query);
             if (!response.ok) throw new Error('Drill-down failed');
             const data = await response.json();
             if (closed || current !== request) return;
             page = target;
             for (const item of data.items) {
                 const row = document.createElement('article');
-                for (const value of [item.description || '—', item.date, formatRupiah(item.amount), item.note || '—', kind === 'mismatch' ? (item.type === 'income' ? 'Jenis: Pemasukan' : 'Jenis: Pengeluaran') : item.category]) {
+                for (const value of [item.description || '—', item.date, formatRupiah(item.amount), item.note || '—', item.category]) {
                     const text = document.createElement('p');
                     text.textContent = value;
                     row.append(text);
                 }
                 const edit = document.createElement('button');
                 edit.type = 'button';
-                edit.textContent = kind === 'mismatch' ? 'Perbaiki transaksi' : 'Edit transaksi';
+                edit.textContent = 'Edit transaksi';
                 edit.addEventListener('click', () => {
                     dialog.close();
                     openTransactionEditor({...item, type: item.type || kind});
                 });
                 row.append(edit);
-                if (kind === 'mismatch') {
-                    const confirm = document.createElement('button');
-                    confirm.type = 'button';
-                    confirm.textContent = 'Sudah benar';
-                    confirm.addEventListener('click', async () => {
-                        if (confirm.disabled) return;
-                        confirm.disabled = edit.disabled = true;
-                        status.textContent = 'Menyimpan konfirmasi…';
-                        try {
-                            const result = await apiFetch(`/api/transactions/${item.transaction_id}/type-review/confirm`, {
-                                method: 'POST', headers: {'Content-Type': 'application/json'},
-                                body: JSON.stringify({fingerprint: item.fingerprint})
-                            });
-                            if (!result.ok) throw new Error('Confirmation failed');
-                            row.remove();
-                            await window.loadAnalytics();
-                            if (!closed) await load(page);
-                        } catch (_) {
-                            if (closed) return;
-                            status.textContent = 'Gagal mengonfirmasi. Muat ulang atau coba lagi.';
-                            confirm.disabled = edit.disabled = false;
-                            retry.hidden = false;
-                            retry.onclick = () => load(page);
-                        }
-                    });
-                    row.append(confirm);
-                }
                 list.append(row);
             }
-            if (kind === 'mismatch' && data.count === 0) { dialog.close(); return; }
-            if (kind === 'mismatch' && !data.items.length && page > 1) { await load(page - 1); return; }
             status.textContent = data.items.length ? `Halaman ${page}` : 'Tidak ada transaksi pada halaman ini.';
             previous.disabled = page <= 1;
             next.disabled = !data.has_more;
@@ -99,6 +71,138 @@ function openCategoryTransactions(category, period, kind = 'expense') {
     previous.addEventListener('click', () => load(page - 1));
     next.addEventListener('click', () => load(page + 1));
     dialog.append(title, close, status, list, previous, next, retry);
+    document.body.append(dialog);
+    dialog.showModal();
+    load(1);
+}
+
+function openTypeReview(period) {
+    const dialog = node('dialog', 'type-review-modal');
+    const header = node('header', 'type-review-header');
+    const title = node('h2', '', 'Jenis transaksi perlu diperiksa');
+    title.id = 'typeReviewTitle';
+    const close = node('button', 'type-review-close', '×');
+    close.type = 'button';
+    close.setAttribute('aria-label', 'Tutup pemeriksaan transaksi');
+    const helper = node('p', 'type-review-helper', 'Kami menemukan transaksi yang mungkin salah dicatat sebagai pemasukan atau pengeluaran.');
+    helper.id = 'typeReviewHelp';
+    dialog.setAttribute('aria-labelledby', title.id);
+    dialog.setAttribute('aria-describedby', helper.id);
+    const status = node('p', 'type-review-status');
+    status.setAttribute('role', 'status');
+    const list = node('div', 'type-review-list');
+    const pagination = node('nav', 'type-review-pagination');
+    pagination.setAttribute('aria-label', 'Halaman transaksi perlu diperiksa');
+    const previous = node('button', '', 'Sebelumnya');
+    const pageLabel = node('span', 'type-review-page');
+    const next = node('button', '', 'Berikutnya');
+    const retry = node('button', 'type-review-retry', 'Coba lagi');
+    for (const button of [previous, next, retry]) button.type = 'button';
+    pagination.append(previous, pageLabel, next);
+    pagination.hidden = retry.hidden = true;
+    header.append(title, close);
+    dialog.append(header, helper, status, list, pagination, retry);
+    let page = 1, total = 0, sequence = 0, closed = false, busy = false;
+    const controls = new Set();
+    const pages = () => Math.ceil(total / 25);
+    function updatePagination() {
+        pagination.hidden = pages() <= 1;
+        previous.hidden = page <= 1;
+        next.hidden = page >= pages();
+        previous.disabled = next.disabled = busy;
+        pageLabel.textContent = `Halaman ${page} dari ${Math.max(1, pages())}`;
+    }
+    function setBusy(value) {
+        busy = value;
+        dialog.setAttribute('aria-busy', String(value));
+        for (const button of controls) button.disabled = value;
+        retry.disabled = value;
+        updatePagination();
+    }
+    function renderItem(item) {
+        const row = node('article', 'type-review-item');
+        const description = node('h3', 'type-review-description', item.description || '—');
+        const meta = node('div', 'type-review-meta');
+        const day = node('time', '', item.date);
+        const badge = node('span', 'type-review-badge ' + (item.type === 'income' ? 'is-income' : 'is-expense'), item.type === 'income' ? 'Pemasukan' : 'Pengeluaran');
+        meta.append(day, badge);
+        const amount = node('p', 'type-review-amount', formatRupiah(item.amount));
+        const actions = node('div', 'type-review-actions');
+        const edit = node('button', 'type-review-primary', 'Perbaiki transaksi');
+        const confirm = node('button', 'type-review-secondary', 'Sudah benar');
+        edit.type = confirm.type = 'button';
+        controls.add(edit); controls.add(confirm);
+        edit.addEventListener('click', () => {
+            if (busy) return;
+            dialog.close();
+            openTransactionEditor(item);
+        });
+        confirm.addEventListener('click', async () => {
+            if (busy) return;
+            setBusy(true);
+            confirm.textContent = 'Menyimpan…';
+            status.textContent = 'Menyimpan konfirmasi…';
+            retry.hidden = true;
+            try {
+                const response = await apiFetch(`/api/transactions/${item.transaction_id}/type-review/confirm`, {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({fingerprint: item.fingerprint})
+                });
+                if (!response.ok) throw new Error('Confirmation failed');
+                row.remove();
+                controls.delete(edit); controls.delete(confirm);
+                const hadMultiplePages = pages() > 1;
+                total = Math.max(0, total - 1);
+                status.textContent = total ? 'Transaksi sudah dikonfirmasi.' : 'Tidak ada transaksi yang perlu diperiksa';
+                updatePagination();
+                // Refresh attention count, never reload the browser page.
+                void window.loadAnalytics();
+                // Reconcile shifted server pagination without clearing visible items first.
+                if (!closed && total && hadMultiplePages) await load(Math.min(page, pages()), true);
+            } catch (_) {
+                if (closed) return;
+                status.textContent = 'Gagal mengonfirmasi. Coba lagi atau muat ulang daftar.';
+                retry.hidden = false;
+                retry.onclick = () => load(page);
+            } finally {
+                confirm.textContent = 'Sudah benar';
+                setBusy(false);
+            }
+        });
+        actions.append(edit, confirm);
+        row.append(description, meta, amount);
+        if (item.note) row.append(node('p', 'type-review-note', item.note));
+        row.append(actions);
+        return row;
+    }
+    async function load(target, silent = false) {
+        const request = ++sequence;
+        setBusy(true); retry.hidden = true;
+        if (!silent) status.textContent = 'Memuat transaksi…';
+        try {
+            const response = await apiFetch('/api/transactions/type-review?' + new URLSearchParams({...period, page: String(target)}));
+            if (!response.ok) throw new Error('Review load failed');
+            const data = await response.json();
+            if (closed || request !== sequence) return;
+            total = data.count;
+            if (total && target > pages()) { await load(pages(), silent); return; }
+            page = target;
+            controls.clear();
+            list.replaceChildren(...data.items.map(renderItem));
+            status.textContent = total ? '' : 'Tidak ada transaksi yang perlu diperiksa';
+        } catch (_) {
+            if (closed || request !== sequence) return;
+            status.textContent = 'Gagal memuat transaksi. Silakan coba lagi.';
+            retry.hidden = false;
+            retry.onclick = () => load(target);
+        } finally {
+            if (!closed && request === sequence) setBusy(false);
+        }
+    }
+    previous.addEventListener('click', () => { if (!busy) load(page - 1); });
+    next.addEventListener('click', () => { if (!busy) load(page + 1); });
+    close.addEventListener('click', () => dialog.close());
+    dialog.addEventListener('close', () => { closed = true; ++sequence; dialog.remove(); });
     document.body.append(dialog);
     dialog.showModal();
     load(1);

@@ -1,47 +1,56 @@
-const assert=require('node:assert/strict');
-const fs=require('node:fs');
-const vm=require('node:vm');
+const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
 const source=fs.readFileSync('static/analytics.js','utf8');
 class Element {
-  constructor(tag){this.tag=tag;this.children=[];this.events={};this.disabled=false;}
-  append(...items){this.children.push(...items);}
-  replaceChildren(...items){this.children=items;}
+  constructor(tag){this.tag=tag;this.children=[];this.events={};this.attrs={};this.disabled=false;}
+  append(...items){for(const item of items){item.parent=this;this.children.push(item);}}
+  replaceChildren(...items){this.children=[];this.append(...items);}
   addEventListener(name,fn){this.events[name]=fn;}
-  setAttribute(){}
-  showModal(){}
+  setAttribute(key,value){this.attrs[key]=value;}
+  showModal(){this.open=true;}
   close(){this.events.close();}
-  remove(){this.removed=true;}
+  remove(){this.removed=true;if(this.parent)this.parent.children=this.parent.children.filter(c=>c!==this);}
   set innerHTML(_){throw Error('unsafe HTML');}
 }
+const find=(root,cls)=>root.children.flatMap(c=>[c,...desc(c)]).find(c=>c.className===cls);
+const desc=root=>root.children.flatMap(c=>[c,...desc(c)]);
 const ids=Object.fromEntries(['analyticsTypeReview','analyticsTypeReviewActions','analyticsTypeReviewCount'].map(id=>[id,new Element('div')]));
 const body=new Element('body'),calls=[];
-let confirmed=false,fail=false,edited,refreshes=0;
-const item={transaction_id:1,type:'expense',description:'<img src=x onerror=alert(1)>',note:'<svg onload=alert(1)>',amount:5,date:'2026-09-01',fingerprint:'server-fingerprint'};
+let fail=false,loadFail=false,edited,refreshes=0,release;
+const seed={transaction_id:1,type:'expense',description:'<img src=x onerror=alert(1)>',note:'<svg onload=alert(1)>',amount:5,date:'2026-09-01',fingerprint:'server-fingerprint'};
+let items=[seed];
 const ctx={URLSearchParams,document:{body,createElement:tag=>new Element(tag),getElementById:id=>ids[id]},
   formatRupiah:n=>'Rp'+n,openTransactionEditor:value=>{edited=value;},
-  text:(id,value)=>{ids[id].textContent=value;},node:(tag,cls,value)=>Object.assign(new Element(tag),{textContent:value}),
-  window:{loadAnalytics:async()=>{refreshes++;ctx.renderTypeReviews({count:confirmed?0:1},{start:'2026-09-01',end:'2026-09-30'});}},
-  apiFetch:async(url,options)=>{calls.push({url,options});if(options){if(!fail)confirmed=true;return {ok:!fail};}return {ok:true,json:async()=>({items:confirmed?[]:[item],count:confirmed?0:1,has_more:false})};}};
-vm.createContext(ctx);
-vm.runInContext(source.slice(source.indexOf('function openCategoryTransactions'),source.indexOf('function shiftMonth'))+source.slice(source.indexOf('function renderTypeReviews'),source.indexOf('async function loadAnalytics')),ctx);
+  text:(id,value)=>{ids[id].textContent=value;},node:(tag,cls,value)=>Object.assign(new Element(tag),{className:cls,textContent:value}),
+  window:{loadAnalytics:async()=>{refreshes++;ctx.renderTypeReviews({count:items.length},{});}},
+  apiFetch:async(url,options)=>{calls.push({url,options});if(options){await new Promise(r=>{release=r;});if(!fail)items=items.filter(i=>i.transaction_id!==Number(url.split('/')[3]));return {ok:!fail};}const page=Number(new URLSearchParams(url.split('?')[1]).get('page'));return {ok:!loadFail,json:async()=>({items:items.slice((page-1)*25,page*25),count:items.length,has_more:page*25<items.length})};}};
+vm.createContext(ctx);vm.runInContext(source.slice(source.indexOf('function openCategoryTransactions'),source.indexOf('function shiftMonth'))+source.slice(source.indexOf('function renderTypeReviews'),source.indexOf('async function loadAnalytics')),ctx);
 const flush=()=>new Promise(r=>setImmediate(r));
 (async()=>{
-  const period={start:'2026-09-01',end:'2026-09-30'};
-  ctx.renderTypeReviews({count:1},period);
-  assert.equal(ids.analyticsTypeReview.hidden,false);assert.equal(ids.analyticsTypeReviewCount.textContent,'1 transaksi perlu diperiksa');
-  ids.analyticsTypeReviewActions.children[0].events.click();await flush();
-  let dialog=body.children.at(-1),row=dialog.children[3].children[0];
-  assert.match(calls[0].url,/transactions\/type-review/);
-  assert.equal(row.children[0].textContent,item.description);assert.equal(row.children[3].textContent,item.note);
-  assert.equal(row.children.at(-2).textContent,'Perbaiki transaksi');assert.equal(row.children.at(-1).textContent,'Sudah benar');
-  fail=true;await row.children.at(-1).events.click();assert.match(dialog.children[2].textContent,/Gagal/);assert.equal(row.children.at(-1).disabled,false);
-  fail=false;const button=row.children.at(-1);const first=button.events.click();button.events.click();await first;
-  assert.equal(calls.filter(c=>c.options).length,2); // failed attempt + one successful double-click
-  const request=calls.findLast(c=>c.options);
-  assert.equal(request.options.method,'POST');assert.deepEqual(JSON.parse(request.options.body),{fingerprint:item.fingerprint});
-  assert(row.removed);assert(dialog.removed);assert.equal(refreshes,1);assert.equal(ids.analyticsTypeReview.hidden,true);assert.equal(ids.analyticsTypeReviewActions.children.length,0);
-  confirmed=false;ctx.openCategoryTransactions('Perlu ditinjau',period,'mismatch');await flush();dialog=body.children.at(-1);row=dialog.children[3].children[0];row.children.at(-2).events.click();assert.equal(edited.transaction_id,1);assert.equal(edited.type,'expense');
-  const html=fs.readFileSync('templates/dashboard.html','utf8');
-  assert.match(html,/Periksa jenis transaksi agar laporan lebih akurat/);assert.match(html,/Kategori perlu diperiksa/);assert(!source.includes('belum terklasifikasi'));assert(!source.includes('__needs_category_review__'));
-  console.log('PASS mismatch UI: conditional, XSS text, edit, confirmation, double-submit, error/retry, refresh and zero-count close');
+  ctx.openCategoryTransactions('Perlu ditinjau',{},'mismatch');await flush();
+  let dialog=body.children.at(-1),row=find(dialog,'type-review-item');
+  assert.equal(find(dialog,'type-review-header').children[0].textContent,'Jenis transaksi perlu diperiksa');
+  assert.equal(find(dialog,'type-review-close').textContent,'×');assert.equal(find(dialog,'type-review-close').attrs['aria-label'],'Tutup pemeriksaan transaksi');
+  assert.equal(find(row,'type-review-description').textContent,seed.description);assert.equal(find(row,'type-review-note').textContent,seed.note);
+  assert.equal(find(row,'type-review-badge is-expense').textContent,'Pengeluaran');
+  assert(find(dialog,'type-review-pagination').hidden);
+  const confirm=find(row,'type-review-secondary'),edit=find(row,'type-review-primary');
+  fail=true;let task=confirm.events.click();confirm.events.click();assert(confirm.disabled&&edit.disabled);assert.equal(confirm.textContent,'Menyimpan…');release();await task;
+  assert.equal(calls.filter(c=>c.options).length,1);assert.match(find(dialog,'type-review-status').textContent,/Gagal/);assert.equal(confirm.disabled,false);
+  const reads=calls.filter(c=>!c.options).length;
+  fail=false;task=confirm.events.click();release();await task;
+  assert(row.removed);assert.equal(calls.filter(c=>!c.options).length,reads,'single-page confirmation must not reload list');assert.equal(refreshes,1);
+  assert.equal(find(dialog,'type-review-status').textContent,'Tidak ada transaksi yang perlu diperiksa');assert.equal(ids.analyticsTypeReview.hidden,true);assert(!dialog.removed);
+  assert.deepEqual(JSON.parse(calls.findLast(c=>c.options).options.body),{fingerprint:seed.fingerprint});
+  find(dialog,'type-review-close').events.click();assert(dialog.removed);
+  items=Array.from({length:26},(_,i)=>({...seed,transaction_id:i+1,type:i?'income':'expense'}));
+  ctx.openTypeReview({});await flush();dialog=body.children.at(-1);
+  let nav=find(dialog,'type-review-pagination');assert(!nav.hidden);assert(nav.children[0].hidden);assert.equal(nav.children[1].textContent,'Halaman 1 dari 2');
+  nav.children[2].events.click();await flush();assert.equal(nav.children[1].textContent,'Halaman 2 dari 2');assert(nav.children[2].hidden);
+  row=find(dialog,'type-review-item');assert.equal(find(row,'type-review-badge is-income').textContent,'Pemasukan');
+  task=find(row,'type-review-secondary').events.click();release();await task;
+  assert(nav.hidden);assert.equal(find(dialog,'type-review-list').children.length,25);assert.equal(nav.children[1].textContent,'Halaman 1 dari 1');
+  find(find(dialog,'type-review-item'),'type-review-primary').events.click();assert.equal(edited.transaction_id,1);assert(dialog.removed);
+  loadFail=true;ctx.openTypeReview({});await flush();dialog=body.children.at(-1);assert(!find(dialog,'type-review-retry').hidden);
+  loadFail=false;find(dialog,'type-review-retry').onclick();await flush();assert.equal(find(dialog,'type-review-list').children.length,25);
+  console.log('PASS type-review modal: title/close, badges, XSS, loading/double-submit, errors/retry, local removal, empty, pagination/reconciliation, edit');
 })().catch(error=>{console.error(error);process.exitCode=1;});
