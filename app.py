@@ -135,6 +135,29 @@ def authenticate_dashboard():
     except InvalidTelegramAuth:
         return jsonify(error="unauthorized"), 401
     # Query-string/body user_id is deliberately never used for authentication.
+    return require_paid_dashboard_access(g.user_id)
+
+
+def require_paid_dashboard_access(owner):
+    """Authorize authenticated API requests before any feature handler runs."""
+    conn = cursor = None
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        entitlement = read_entitlement(cursor, owner, now=datetime.now(), dialect='postgresql')
+        paid = entitlement is not None and (
+            entitlement.lifetime in ('starter', 'pro') or
+            entitlement.effective == 'pro_legacy_active')
+        if not paid:
+            return jsonify(error='payment_required',
+                           message='Aktifkan Dompi untuk mulai menggunakan fitur ini.'), 403
+    except Exception:
+        return jsonify(error='access_check_unavailable'), 503
+    finally:
+        if cursor is not None:
+            cursor.close()
+        if conn is not None:
+            conn.close()
 
 
 @app.after_request
