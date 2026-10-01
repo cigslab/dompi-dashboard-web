@@ -1,0 +1,22 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const {create, shift} = require('../static/home-month.js');
+assert.equal(create(new Date(2026,8,30)).selected,'2026-09');
+const state=create(new Date(2026,9,1));
+assert.equal(state.selected,'2026-10');
+assert(state.options().includes('2026-09') && state.options().includes('2026-11'));
+const rows=[{date:'2026-09-30',amount:99},{date:'2026-10-01',amount:10}];
+assert.deepEqual(state.rows(rows.slice(0,1)),[]);
+assert.equal(state.selected,'2026-10');
+assert.deepEqual(state.rows(rows),[rows[1]]);
+for(const path of ['/api/summary','/api/cashflow','/api/categories']) assert.equal(state.url(path),path+'?month=2026-10');
+state.selected=shift(state.selected,-1);assert.deepEqual(state.rows(rows),[rows[0]]);
+assert.equal(shift('2026-12',1),'2027-01');assert.equal(shift('2027-01',-1),'2026-12');
+assert.equal(create(new Date(2027,0,1)).selected,'2027-01');
+const html=fs.readFileSync('templates/dashboard.html','utf8');
+assert(!html.includes('value="2026-09"'));
+for(const constant of ['API_URL','CASHFLOW_API_URL','CATEGORY_API_URL']) assert(html.includes(`apiFetch(homeMonth.url(${constant}))`));
+assert(html.includes('homeMonth.rows(homeData, requestedMonth).slice(0, 5)'));
+// Compile inline scripts to catch integration syntax errors without running unrelated UI.
+for(const match of html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)) if(match[1].trim()) new Function(match[1]);
+console.log('PASS: September/October, empty state, navigation, year rollover and panel wiring');

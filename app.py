@@ -446,14 +446,27 @@ def account():
             conn.close()
 
 
+def home_month_filter():
+    month = request.args.get('month')
+    if month is None:
+        return '', []
+    if not re.fullmatch(r'[0-9]{4}-(?:0[1-9]|1[0-2])', month):
+        raise ValueError('Invalid month')
+    return ' AND date LIKE %s', [month + '-%']
+
+
 @app.route("/api/summary")
 def summary():
+    try:
+        month_sql, month_params = home_month_filter()
+    except ValueError:
+        return jsonify(error='Periode harus YYYY-MM'), 400
     user_id = g.user_id
     conn = get_connection()
     cursor = conn.cursor()
 
     cursor.execute(
-        """
+        f"""
         SELECT
             COALESCE(
                 SUM(
@@ -476,9 +489,9 @@ def summary():
             ) AS expense
 
         FROM expenses
-        WHERE user_id = %s AND currency = 'IDR'
+        WHERE user_id = %s AND currency = 'IDR'{month_sql}
         """,
-        (user_id,)
+        (user_id, *month_params)
     )
 
     row = cursor.fetchone()
@@ -499,6 +512,10 @@ def summary():
 
 @app.route("/api/cashflow")
 def cashflow():
+    try:
+        month_sql, month_params = home_month_filter()
+    except ValueError:
+        return jsonify(error='Periode harus YYYY-MM'), 400
     user_id = g.user_id
     conn = None
     cursor = None
@@ -508,7 +525,7 @@ def cashflow():
         cursor = conn.cursor()
 
         cursor.execute(
-            """
+            f"""
             SELECT
                 LEFT(date, 10) AS transaction_date,
                 COALESCE(
@@ -531,12 +548,12 @@ def cashflow():
                 ) AS expense
 
             FROM expenses
-            WHERE user_id = %s AND currency = 'IDR'
+            WHERE user_id = %s AND currency = 'IDR'{month_sql}
 
             GROUP BY LEFT(date, 10)
             ORDER BY LEFT(date, 10)
             """,
-            (user_id,)
+            (user_id, *month_params)
         )
 
         rows = cursor.fetchall()
@@ -639,6 +656,10 @@ def analytics_monthly():
 
 @app.route("/api/categories")
 def categories():
+    try:
+        month_sql, month_params = home_month_filter()
+    except ValueError:
+        return jsonify(error='Periode harus YYYY-MM'), 400
     user_id = g.user_id
     conn = None
     cursor = None
@@ -655,13 +676,13 @@ def categories():
 
             FROM expenses
 
-            WHERE user_id = %s AND currency = 'IDR'
+            WHERE user_id = %s AND currency = 'IDR'{month_sql}
             AND type = 'expense'
 
             GROUP BY {category_sql()}
             ORDER BY total DESC
             """,
-            (user_id,)
+            (user_id, *month_params)
         )
 
         rows = cursor.fetchall()
@@ -884,6 +905,10 @@ def reset_transactions():
 
 @app.route("/api/transactions")
 def transactions():
+    try:
+        month_sql, month_params = home_month_filter()
+    except ValueError:
+        return jsonify(error='Periode harus YYYY-MM'), 400
     user_id = g.user_id
     conn = None
     cursor = None
@@ -893,7 +918,7 @@ def transactions():
         cursor = conn.cursor()
 
         cursor.execute(
-            """
+            f"""
             SELECT
                 transaction_id,
                 category,
@@ -906,12 +931,12 @@ def transactions():
 
             FROM expenses
 
-            WHERE user_id = %s AND currency = 'IDR'
+            WHERE user_id = %s AND currency = 'IDR'{month_sql}
 
             ORDER BY transaction_id DESC
             LIMIT 10
             """,
-            (user_id,)
+            (user_id, *month_params)
         )
 
         rows = cursor.fetchall()

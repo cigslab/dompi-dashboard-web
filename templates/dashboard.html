@@ -174,7 +174,6 @@
         </div>
 
         <select id="donutMonth">
-            <option value="2026-09">September 2026</option>
         </select>
     </div>
 
@@ -711,6 +710,26 @@ document.getElementById("accountProfileRetry").addEventListener("click", loadPro
 document.getElementById("accountUsageRetry").addEventListener("click", loadAccountUsage);
 loadProfile();
 </script>
+<script src="/static/home-month.js"></script>
+<script>
+const homeMonth = HomeMonth.create();
+const homeMonthSelect = document.getElementById('donutMonth');
+function renderHomeMonths() {
+    homeMonthSelect.replaceChildren(...homeMonth.options().map(month => {
+        const option = document.createElement('option');
+        option.value = month;
+        option.textContent = new Date(month + '-01T00:00:00').toLocaleDateString('id-ID', {month: 'long', year: 'numeric'});
+        return option;
+    }));
+    homeMonthSelect.value = homeMonth.selected;
+}
+renderHomeMonths();
+homeMonthSelect.addEventListener('change', () => {
+    homeMonth.selected = homeMonthSelect.value;
+    renderHomeMonths();
+    loadSummary(); loadCashflowChart(); loadCategories(); loadTransactions();
+});
+</script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <script>
@@ -721,14 +740,16 @@ const CASHFLOW_API_URL =
     "/api/cashflow";
 
 async function loadCashflowChart() {
+    const requestedMonth = homeMonth.selected;
     try {
-        const response = await apiFetch(CASHFLOW_API_URL);
+        const response = await apiFetch(homeMonth.url(CASHFLOW_API_URL));
 
         if (!response.ok) {
             throw new Error("Gagal mengambil data cashflow");
         }
 
         const data = await response.json();
+        if (requestedMonth !== homeMonth.selected) return;
 
         const labels = data.map(item => {
             const date = new Date(item.date);
@@ -827,14 +848,16 @@ function formatRupiah(value) {
 }
 
 async function loadSummary() {
+    const requestedMonth = homeMonth.selected;
     try {
-        const response = await apiFetch(API_URL);
+        const response = await apiFetch(homeMonth.url(API_URL));
 
         if (!response.ok) {
             throw new Error("Gagal mengambil data dashboard");
         }
 
         const data = await response.json();
+        if (requestedMonth !== homeMonth.selected) return;
 
         document.getElementById("balance").textContent =
             formatRupiah(data.balance);
@@ -875,14 +898,16 @@ async function loadCategories() {
     const donutCanvas =
         document.getElementById("expenseDonutChart");
 
+    const requestedMonth = homeMonth.selected;
     try {
-        const response = await apiFetch(CATEGORY_API_URL);
+        const response = await apiFetch(homeMonth.url(CATEGORY_API_URL));
 
         if (!response.ok) {
             throw new Error("Gagal mengambil kategori");
         }
 
         const data = await response.json();
+        if (requestedMonth !== homeMonth.selected) return;
 
         // Ambil hanya data yang memiliki total > 0
         const expenseData = data.filter(
@@ -1183,14 +1208,18 @@ async function loadTransactions() {
     const allTransactionList =
         document.getElementById("allTransactionList");
 
+    const requestedMonth = homeMonth.selected;
     try {
-        const response = await apiFetch(TRANSACTIONS_API_URL);
+        const [response, recentResponse] = await Promise.all([
+            apiFetch(TRANSACTIONS_API_URL), apiFetch(homeMonth.url(TRANSACTIONS_API_URL))
+        ]);
 
-        if (!response.ok) {
+        if (!response.ok || !recentResponse.ok) {
             throw new Error("Gagal mengambil transaksi");
         }
-        const data = await response.json();
-        if (data.length === 0) {
+        const [data, homeData] = await Promise.all([response.json(), recentResponse.json()]);
+        if (requestedMonth !== homeMonth.selected) return;
+        if (data.length === 0 && homeData.length === 0) {
 
             transactionList.innerHTML =
                 "<p>Belum ada transaksi.</p>";
@@ -1204,7 +1233,8 @@ async function loadTransactions() {
         transactionList.innerHTML = "";
         allTransactionList.innerHTML = "";
 
-        const recentTransactions = data.slice(0, 5);
+        const recentTransactions = homeMonth.rows(homeData, requestedMonth).slice(0, 5);
+        if (recentTransactions.length === 0) transactionList.innerHTML = '<p>Belum ada transaksi.</p>';
         recentTransactions.forEach(item => {
 
             const date = new Date(item.date);
