@@ -39,3 +39,22 @@ class PaidDashboardTests(unittest.TestCase):
         self.assertEqual(self.client.get('/health').status_code,200)
         self.assertEqual(self.client.options('/api/summary').status_code,204)
         self.get_connection.assert_not_called()
+
+    def test_starter_analytics_denied_basic_transactions_preserved(self):
+        self.db.execute('ALTER TABLE users ADD COLUMN lifetime_plan TEXT')
+        self.db.execute("UPDATE users SET lifetime_plan='starter' WHERE telegram_id=101");self.db.commit()
+        for path in ('/api/analytics/monthly','/api/cashflow','/api/categories',
+                     '/api/categories/breakdown','/api/categories/transactions','/api/reports'):
+            result=self.request('GET',path,signed())
+            self.assertEqual(result.status_code,403,path)
+            self.assertEqual(result.json['error'],'pro_required')
+        self.assertEqual(self.request('GET','/api/transactions',signed()).status_code,200)
+        self.assertEqual(self.request('GET','/api/summary',signed()).status_code,200)
+        self.assertEqual(self.request('GET','/api/export/transactions',signed()).status_code,403)
+
+    def test_pro_analytics_export_and_legacy_pro_preserved(self):
+        self.db.execute('ALTER TABLE users ADD COLUMN lifetime_plan TEXT')
+        for plan,expiry,lifetime in [('free',None,'pro'),('pro','2099-01-01',None)]:
+            self.db.execute('UPDATE users SET plan=?,pro_until=?,lifetime_plan=? WHERE telegram_id=101',(plan,expiry,lifetime));self.db.commit()
+            for path in ('/api/analytics/monthly','/api/cashflow','/api/categories','/api/export/transactions'):
+                self.assertEqual(self.request('GET',path,signed()).status_code,200,path)

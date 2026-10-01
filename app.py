@@ -151,6 +151,16 @@ def require_paid_dashboard_access(owner):
         if not paid:
             return jsonify(error='payment_required',
                            message='Aktifkan Dompi untuk mulai menggunakan fitur ini.'), 403
+        if request.path in {
+            '/api/analytics/monthly', '/api/cashflow', '/api/categories',
+            '/api/categories/breakdown', '/api/categories/transactions', '/api/reports',
+        }:
+            if entitlement.requires_review:
+                return jsonify(error='entitlement_review_required'), 403
+            capability = resolve_capabilities(entitlement,
+                free_policy=Capabilities(False, False, False, False, 0))
+            if not capability.advanced_analytics:
+                return jsonify(error='pro_required', message='Analitik tersedia untuk Pro.'), 403
     except Exception:
         return jsonify(error='access_check_unavailable'), 503
     finally:
