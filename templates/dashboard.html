@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Dompi Dashboard</title>
+    <script src="/static/theme.js"></script>
 
     <link rel="stylesheet" href="../static/style.css">
 </head>
@@ -74,6 +75,10 @@
                             <button id="accountExportDownload" class="account-retry" type="submit">Unduh CSV</button>
                             <p id="accountExportMessage" class="account-caption" role="status" aria-live="polite"></p>
                         </form>
+                    </section>
+                    <section class="panel theme-setting" aria-label="Tampilan">
+                        <div><h2>Tampilan</h2><p class="account-caption">Pilih tema yang nyaman untukmu.</p></div>
+                        <button type="button" id="themeToggle" aria-pressed="false">☀️ Terang</button>
                     </section>
                     <ul class="account-actions" aria-label="Layanan akun">
                         <li id="accountUpgradeAction" hidden><a href="/upgrade" class="account-action account-action-upgrade"><span>Upgrade ke Pro</span><span aria-hidden="true">→</span></a></li>
@@ -803,16 +808,16 @@ async function loadCashflowChart() {
                             display: false
                         },
                         ticks: {
-                            color: "#8f9894"
+                            color: DompiTheme.color("--muted")
                         }
                     },
                     y: {
                         beginAtZero: true,
                         grid: {
-                            color: "#202825"
+                            color: DompiTheme.color("--border")
                         },
                         ticks: {
-                            color: "#8f9894",
+                            color: DompiTheme.color("--muted"),
                             callback: function(value) {
                                 return new Intl.NumberFormat(
                                     "id-ID",
