@@ -36,7 +36,7 @@ class LifetimeCheckoutTests(unittest.TestCase):
         self.get_connection.return_value = CheckoutConnection(self.db)
         self.db.execute('ALTER TABLE users ADD COLUMN lifetime_plan TEXT')
         self.db.execute('ALTER TABLE users ADD COLUMN customer_id TEXT')
-        self.db.execute("UPDATE users SET plan='free',customer_id='C1'")
+        self.db.execute("UPDATE users SET plan='pro',pro_until='2099-01-01 00:00:00',customer_id='C1'")
         self.db.execute("""CREATE TABLE payments(id INTEGER PRIMARY KEY AUTOINCREMENT,
             payment_id TEXT UNIQUE,telegram_id BIGINT,customer_id TEXT,duration INTEGER,
             amount INTEGER,status TEXT,created_at TEXT,paid_at TEXT,product_code TEXT,
@@ -48,7 +48,7 @@ class LifetimeCheckoutTests(unittest.TestCase):
             return_value=(True, {'redirect_url': 'https://app.sandbox.midtrans.com/snap/v2/vtweb/test'}))
         self.snap = self.provider.start(); self.addCleanup(self.provider.stop)
 
-    def state(self, lifetime=None, plan='free', expiry=None):
+    def state(self, lifetime=None, plan='pro', expiry='2099-01-01 00:00:00'):
         self.db.execute('UPDATE users SET lifetime_plan=?,plan=?,pro_until=? WHERE telegram_id=101',
                         (lifetime, plan, expiry))
         self.db.commit()
@@ -68,6 +68,10 @@ class LifetimeCheckoutTests(unittest.TestCase):
             with self.subTest(lifetime=lifetime, plan=plan, expiry=expiry):
                 self.state(lifetime, plan, expiry)
                 result=self.request('GET', '/api/checkout/products?user_id=202', signed())
+                if lifetime is None and plan == 'free':
+                    self.assertEqual(result.status_code, 403)
+                    self.assertEqual(result.json['error'], 'payment_required')
+                    continue
                 self.assertEqual(result.status_code, 200)
                 self.assertEqual([p['product_code'] for p in result.json['products']], codes)
                 prices={'starter_lifetime':99000,'pro_lifetime':129000,'starter_to_pro_lifetime':30000}
@@ -88,7 +92,8 @@ class LifetimeCheckoutTests(unittest.TestCase):
             ('pro','free',None,'starter_to_pro_lifetime'),
             (None,'pro',None,'pro_lifetime')]:
             self.state(life,plan,expiry)
-            self.assertEqual(self.post(code).status_code,409)
+            expected = 403 if life is None and (plan == 'free' or expiry is None) else 409
+            self.assertEqual(self.post(code).status_code, expected)
         self.state()
         for code in ('upgrade_30','upgrade_365','bad',None,[],{}):
             self.assertEqual(self.post(code).status_code,400)

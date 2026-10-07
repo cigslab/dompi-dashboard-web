@@ -33,7 +33,7 @@ class PublicPageTests(unittest.TestCase):
         self.assertNotIn('Rp79.000', html)
         self.assertIn('/static/upgrade.js', html)
         self.assertIn('telegram-web-app.js', html)
-        self.assertIn('Export dan analitik lanjutan belum tersedia', html)
+        self.assertIn('Export Data CSV', html)
         self.assertIn('setelah pembayaran diverifikasi', html)
         self.assertNotIn('<form', html)
         self.assertEqual(api.app.test_client().post('/upgrade').status_code, 405)

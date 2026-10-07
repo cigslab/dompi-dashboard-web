@@ -29,13 +29,13 @@ class AnalyticsPeriodTests(unittest.TestCase):
             self.assertEqual(len(drill['items']),1)
             self.assertEqual(drill['items'][0]['amount'],20 if kind=='expense' else 50)
 
-    def test_invalid_filters_fail_before_database_and_auth(self):
+    def test_invalid_filters_follow_paid_guard(self):
         self.get_connection.reset_mock()
         for endpoint in ('breakdown','review'):
             for query in ('start=2026-02-30&end=2026-03-01','start=2026-10-01&end=2026-01-01','start=2026-01-01','month=2026-09&start=2026-01-01&end=2026-09-30','month=2026-13'):
                 self.assertEqual(self.request('GET','/api/categories/'+endpoint+'?'+query,signed()).status_code,400)
             self.assertEqual(self.request('GET','/api/categories/'+endpoint+'?start=2026-01-01&end=2026-09-30').status_code,401)
-        self.get_connection.assert_not_called()
+        self.assertEqual(self.get_connection.call_count, 10)  # Entitlement reads only.
 
     def test_legacy_month_and_all_time_unchanged(self):
         for endpoint in ('breakdown','review'):

@@ -34,6 +34,11 @@ class AccountEntitlementTests(unittest.TestCase):
                 before = self.db.execute('SELECT * FROM users ORDER BY telegram_id').fetchall()
                 with patch.dict(os.environ, {'FREE_MONTHLY_LIMIT': '75'}):
                     response = self.request('GET', '/api/account?user_id=202', signed(), json={'user_id': 202})
+                if effective in ('free', None):
+                    self.assertEqual(response.status_code, 403)
+                    self.assertEqual(response.json['error'], 'payment_required')
+                    self.assertEqual(self.db.execute('SELECT * FROM users ORDER BY telegram_id').fetchall(), before)
+                    continue
                 self.assertEqual(response.status_code, 200)
                 status = response.json['entitlement']
                 self.assertEqual((status['effective_plan'], status['entitlement_source'], status['lifetime'], status['requires_review']), (effective, source, is_lifetime, review))
@@ -60,8 +65,9 @@ class AccountEntitlementTests(unittest.TestCase):
         self.db.execute('ALTER TABLE users ADD COLUMN lifetime_plan TEXT')
         self.db.execute("UPDATE users SET lifetime_plan='invalid' WHERE telegram_id=101")
         self.db.commit()
-        with self.assertLogs(api.app.logger, level='ERROR'):
-            self.assertEqual(self.request('GET', '/api/account', signed()).status_code, 500)
+        response = self.request('GET', '/api/account', signed())
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.json['error'], 'access_check_unavailable')
         self.assertEqual(self.db.execute('SELECT lifetime_plan FROM users WHERE telegram_id=101').fetchone()[0], 'invalid')
 
     def test_account_markup_exposes_safe_feature_links_without_db(self):

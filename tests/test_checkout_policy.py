@@ -56,7 +56,7 @@ class GateRouteTests(unittest.TestCase):
             result=self.request('POST',path,signed(),json=payload)
             self.assertEqual(result.status_code,403)
             self.assertEqual(result.json['error'],'lifetime_checkout_disabled')
-        self.get_connection.assert_not_called()
+        self.assertEqual(self.get_connection.call_count, 2)  # Paid guard reads.
         self.snap.assert_not_called()
 
     def test_canary_and_non_canary_use_verified_identity(self):
@@ -81,7 +81,7 @@ class GateRouteTests(unittest.TestCase):
             self.assertFalse(self.request('GET','/api/checkout/products',signed()).json['checkout_available'])
             self.get_connection.reset_mock()
             self.assertEqual(self.post('pro_lifetime').status_code,403)
-            self.get_connection.assert_not_called()
+            self.get_connection.assert_called_once()  # Paid guard read.
         self.snap.assert_not_called()
 
     def test_kill_switch_after_offer_before_purchase(self):

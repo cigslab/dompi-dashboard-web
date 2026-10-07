@@ -12,7 +12,7 @@ class ExportTicketTests(unittest.TestCase):
     def setUp(self):
         fixtures.DashboardAuthTests.setUp(self)
         self.db.execute('ALTER TABLE users ADD COLUMN lifetime_plan TEXT')
-        self.db.execute("UPDATE users SET plan='free', lifetime_plan='pro'")
+        self.db.execute("UPDATE users SET plan='free', pro_until=NULL, lifetime_plan='pro'")
         self.db.commit()
 
     def issue(self, user=101, **extra):

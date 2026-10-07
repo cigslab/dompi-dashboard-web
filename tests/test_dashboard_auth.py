@@ -137,7 +137,7 @@ class DashboardAuthTests(unittest.TestCase):
         self.db.execute('DROP TABLE IF EXISTS monthly_usage')
         self.db.execute('CREATE TABLE monthly_usage (user_id BIGINT, month TEXT, expense_count INTEGER, PRIMARY KEY(user_id, month))')
         self.db.execute('CREATE TABLE users (telegram_id BIGINT PRIMARY KEY, first_name TEXT, username TEXT, plan TEXT, pro_until TEXT, joined_at TEXT)')
-        self.db.executemany('INSERT INTO users (telegram_id, first_name, username) VALUES (?,?,?)', [(101, 'Nama A', 'user_a'), (202, 'Nama B', 'user_b')])
+        self.db.executemany('INSERT INTO users (telegram_id, first_name, username, plan, pro_until) VALUES (?,?,?,?,?)', [(101, 'Nama A', 'user_a', 'pro', '2099-01-01 00:00:00'), (202, 'Nama B', 'user_b', 'pro', '2099-01-01 00:00:00')])
         self.db.execute('CREATE TABLE expenses (user_id INTEGER, transaction_id INTEGER, category TEXT, analytics_category TEXT, amount BIGINT, note TEXT, date TEXT, type TEXT, currency TEXT, type_review_confirmed_fingerprint TEXT, id ' + ('BIGSERIAL PRIMARY KEY' if dsn else 'INTEGER PRIMARY KEY AUTOINCREMENT') + ')')
         self.db.executemany('INSERT INTO expenses (user_id, transaction_id, category, analytics_category, amount, note, date, type, currency) VALUES (?,?,?,?,?,?,?,?,?)', [
             (101, 1, 'A expense', 'Food', 10, 'A', '2026-09-14', 'expense', 'IDR'),
@@ -160,7 +160,7 @@ class DashboardAuthTests(unittest.TestCase):
         return self.client.open(path, method=method, headers=headers, **kwargs)
 
     def test_integer_amount_contract(self):
-        for value in (0, -10, 10.0, Decimal('10.000'), Decimal('92233720368547758070')):
+        for value in (0, 40, Decimal('40.00'), -10, 10.0, Decimal('10.000'), Decimal('92233720368547758070')):
             with self.subTest(value=value):
                 self.assertIs(type(api.integer_amount(value)), int)
                 self.assertEqual(api.integer_amount(value), value)
@@ -175,6 +175,7 @@ class DashboardAuthTests(unittest.TestCase):
             ('/api/cashflow', lambda n: [('2026-09-14', n, 0)], lambda d: [d[0]['income'], d[0]['expense']]),
             ('/api/analytics/monthly', lambda n: [('2026-09', n, 0, 1)], lambda d: [d[0]['income'], d[0]['expense']]),
             ('/api/categories', lambda n: [('Food', n)], lambda d: [d[0]['total']]),
+            ('/api/categories/review', lambda n: [('expense', 1, n)], lambda d: [d['items'][0]['total']]),
             ('/api/categories/breakdown', lambda n: [('Food', 1, n)], lambda d: [d['total_expense'], d['categories'][0]['total']]),
             ('/api/transactions', lambda n: [(1, 'Food', 'Food', n, '', '2026-09-14', 'expense', 'IDR')], lambda d: [d[0]['amount']]),
             ('/api/reports?period=custom&start=2026-09-14&end=2026-09-14',
@@ -182,12 +183,13 @@ class DashboardAuthTests(unittest.TestCase):
              lambda d: [d['income'], d['expense'], d['balance'], d['average_daily_expense'], d['categories'][0]['total'], d['comparison']['expense']]),
         ]
         for route, rows, amounts in cases:
-            for value in (Decimal('10.00'), 10.0, Decimal('10.5')):
+            for value in (40, Decimal('40.00'), 40.0, Decimal('10.5')):
                 with self.subTest(route=route, value=value):
                     conn = MagicMock()
                     conn.cursor.return_value.fetchall.return_value = rows(value)
                     conn.cursor.return_value.fetchone.return_value = rows(value)[0]
-                    with patch.object(api, 'get_connection', return_value=conn), patch.dict(api.app.config, TESTING=False):
+                    # Isolate serialization from the separately tested paid-access guard.
+                    with patch.object(api, 'require_paid_dashboard_access', return_value=None), patch.object(api, 'get_connection', return_value=conn), patch.dict(api.app.config, TESTING=False):
                         response = self.request('GET', route, signed())
                     if value == Decimal('10.5'):
                         self.assertEqual(response.status_code, 500)
@@ -225,7 +227,7 @@ class DashboardAuthTests(unittest.TestCase):
         self.get_connection.reset_mock()
         for month in ['2026-13', 'bad', '2026-1']:
             self.assertEqual(self.request('GET', '/api/categories/breakdown?month='+month, signed()).status_code, 400)
-        self.get_connection.assert_not_called()
+        self.assertEqual(self.get_connection.call_count, 3)  # Entitlement reads only.
 
     def report(self, query='', user=101):
         from datetime import date
@@ -299,7 +301,7 @@ class DashboardAuthTests(unittest.TestCase):
                       '?period=custom&start=2026-9-01&end=2026-09-14',
                       '?period=custom&start=0001-01-01&end=2026-09-14'):
             self.assertEqual(self.report(query).status_code, 400)
-        self.get_connection.assert_not_called()
+        self.assertEqual(self.get_connection.call_count, 6)  # Entitlement reads only.
 
     def test_reset_ownership_retry_and_new_transactions(self):
         month = api.datetime.now().strftime('%Y-%m')
@@ -320,15 +322,33 @@ class DashboardAuthTests(unittest.TestCase):
 
     def test_reset_rolls_back_failed_commit(self):
         token = self.request('GET', '/api/transactions/reset', signed()).json['token']
-        connection = api.get_connection()
+        connection_factory = api.get_connection
+        wrappers = []
         class FailedCommit:
-            def cursor(self): return connection.cursor()
-            def commit(self): raise RuntimeError('simulated commit failure')
-            def rollback(self): connection.rollback()
-            def close(self): connection.close()
-        with patch.object(api, 'get_connection', return_value=FailedCommit()):
+            def __init__(self):
+                # Guard and handler each own a connection; never reuse a closed PG connection.
+                self.connection = (connection_factory() if os.getenv('DOMPI_DASHBOARD_TEST_DSN')
+                                   else MemoryConnection(self_db))
+                self.commits = self.rollbacks = self.closes = 0
+                wrappers.append(self)
+            def cursor(self): return self.connection.cursor()
+            def commit(self):
+                self.commits += 1
+                raise RuntimeError('simulated commit failure')
+            def rollback(self):
+                self.rollbacks += 1
+                self.connection.rollback()
+            def close(self):
+                self.closes += 1
+                self.connection.close()
+        self_db = self.db
+        with patch.object(api, 'get_connection', side_effect=FailedCommit):
             response = self.request('DELETE', '/api/transactions/reset', signed(), json={'token':token,'confirmation':'HAPUS'})
         self.assertEqual(response.status_code, 500)
+        self.assertEqual(len(wrappers), 2)
+        self.assertIsNot(wrappers[0].connection, wrappers[1].connection)
+        self.assertEqual([(w.commits, w.rollbacks, w.closes) for w in wrappers],
+                         [(0, 0, 1), (1, 1, 1)])
         self.assertEqual(self.db.execute('SELECT COUNT(*) FROM expenses').fetchone()[0], 4)
 
     def test_reset_requires_auth_and_explicit_confirmation(self):
@@ -349,6 +369,10 @@ class DashboardAuthTests(unittest.TestCase):
                 self.db.commit()
                 with patch.dict(os.environ, {'FREE_MONTHLY_LIMIT': ' 75 '}):
                     response = self.request('GET', '/api/account', signed())
+                if plan == 'free':
+                    self.assertEqual(response.status_code, 403)
+                    self.assertEqual(response.json['error'], 'payment_required')
+                    continue
                 self.assertEqual(response.status_code, 200)
                 self.assertEqual(response.json['plan'], plan)
                 self.assertEqual(response.json['free_monthly_limit'], 75)
@@ -370,22 +394,28 @@ class DashboardAuthTests(unittest.TestCase):
         self.db.executemany('INSERT INTO monthly_usage VALUES (?,?,?)', [(101, month, 37), (202, month, 99), (101, '2000-01', 88)])
         self.db.commit()
         response = self.request('GET', '/api/account?user_id=202', signed(), json={'user_id': 202})
-        self.assertEqual({k: v for k, v in response.json.items() if k != 'entitlement'}, dict(plan='free', monthly_usage=37, usage_month=month, free_monthly_limit=None, joined_at='2025-01-02'))
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json['error'], 'payment_required')
+        self.db.execute("UPDATE users SET pro_until='2099-01-01 00:00:00' WHERE telegram_id=101")
+        self.db.commit()
+        response = self.request('GET', '/api/account?user_id=202', signed())
+        self.assertEqual(response.json['monthly_usage'], 37)
+        self.assertEqual(response.json['joined_at'], '2025-01-02')
         self.assertEqual(response.headers['Cache-Control'], 'no-store')
         self.assertEqual(self.db.execute('SELECT plan FROM users WHERE telegram_id=101').fetchone()[0], 'pro')
 
     def test_account_missing_and_unknown_data(self):
         result = self.request('GET', '/api/account', signed()).json
-        self.assertIsNone(result['plan'])
+        self.assertEqual(result['plan'], 'pro')
         self.assertIsNone(result['joined_at'])
         self.assertEqual(result['monthly_usage'], 0)
-        self.assertEqual(self.request('GET', '/api/account', signed(303)).status_code, 404)
+        self.assertEqual(self.request('GET', '/api/account', signed(303)).status_code, 403)
         self.db.execute("UPDATE users SET plan='pro', pro_until='2099-01-01 00:00:00' WHERE telegram_id=101")
         self.db.commit()
         self.assertEqual(self.request('GET', '/api/account', signed()).json['plan'], 'pro')
         self.db.execute("UPDATE users SET pro_until='invalid', joined_at='invalid' WHERE telegram_id=101")
         self.db.commit()
-        self.assertIsNone(self.request('GET', '/api/account', signed()).json['plan'])
+        self.assertEqual(self.request('GET', '/api/account', signed()).status_code, 403)
 
     def test_profile_user_a_syncs_verified_name(self):
         response = self.request('GET', '/api/profile?user_id=202', signed(), json={'user_id': 202})
@@ -407,8 +437,7 @@ class DashboardAuthTests(unittest.TestCase):
         self.db.commit()
         self.assertEqual(self.request('GET', '/api/profile', signed(user=json.dumps({'id':101,'first_name':' '}))).json,
                          {'display_name': 'User', 'username': None})
-        self.assertEqual(self.request('GET', '/api/profile', signed(303)).json,
-                         {'display_name': 'User', 'username': None})
+        self.assertEqual(self.request('GET', '/api/profile', signed(303)).status_code, 403)
 
     def test_runtime_honors_port_and_has_no_bot_imports(self):
         import runpy
@@ -564,7 +593,7 @@ class DashboardAuthTests(unittest.TestCase):
         for method, path in old:
             self.assertEqual(self.request(method, path).status_code, 401)
             self.assertIn(self.request(method, path, signed()).status_code, [404, 405])
-        self.get_connection.assert_not_called()
+        self.assertEqual(self.get_connection.call_count, 7)  # Entitlement reads only.
         self.assertFalse(any('user_id' in rule.arguments for rule in api.app.url_map.iter_rules()))
 
     def test_preflight_never_queries_and_cors_is_restricted(self):

@@ -24,7 +24,7 @@ class ExportTests(unittest.TestCase):
         clock=patch.object(api,'datetime',FixedDateTime)
         clock.start();self.addCleanup(clock.stop)
         self.db.execute('ALTER TABLE users ADD COLUMN lifetime_plan TEXT')
-        self.db.execute("UPDATE users SET plan='free',lifetime_plan='pro'")
+        self.db.execute("UPDATE users SET plan='free',pro_until=NULL,lifetime_plan='pro'")
         self.db.commit()
 
     def export(self, period='all', user=101):

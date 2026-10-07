@@ -79,14 +79,14 @@ async function runTests(index,attack){
   const counts=()=>Object.fromEntries(refreshEndpoints.map(path=>[path,window.__testCalls.filter(c=>c.path===path&&c.method==='GET').length]));
   const assertRefresh=async(before,label)=>{
     for(let i=0;i<50&&refreshEndpoints.some(path=>counts()[path]<=before[path]);i++) await wait();
-    for(const path of refreshEndpoints) eq(counts()[path]-before[path],1,label+' refresh '+path);
+    for(const path of refreshEndpoints) eq(counts()[path]-before[path],path==='/api/transactions'?2:1,label+' refresh '+path);
   };
   const send=(selector,event)=>document.querySelector(selector).dispatchEvent(new Event(event,{bubbles:true}));
   try {
     for(let i=0;i<50&&document.querySelectorAll('#allTransactionList .all-transaction-item').length!==4;i++)await wait();
     await wait();
     eq(window.__testErrors,[],'page errors');
-    eq(text('[data-display-name]'),Array(4).fill(attack?window.__testTexts[0]:'Nama A'),'database name rendered as text');
+    eq(text('[data-display-name]'),Array(2).fill(attack?window.__testTexts[0]:'Nama A'),'database name rendered as text');
     eq(text('.menu .menu-item'),['Beranda','Transaksi','Analitik','Akun'],'four primary destinations');
     eq(document.querySelectorAll('#categoriesPage,#reportsPage,#categoriesMenu,#reportsMenu').length,0,'legacy pages and menus removed');
     eq(document.querySelector('#analyticsBreakdown').closest('#analyticsPage')!==null,true,'breakdown inside analytics');
@@ -393,7 +393,7 @@ http.createServer((req,res)=>{
   if(req.method==='POST'){let body='';req.on('data',b=>body+=b);req.on('end',()=>{const result=JSON.parse(body);results[`${result.index}-${result.attack}`]=result;console.log(JSON.stringify(result));res.end('ok');});return;}
   res.setHeader('Content-Type','application/json');res.end(JSON.stringify(results));return;
  }
- if(['/static/analytics.js','/static/navigation.js','/static/export.js'].includes(url.pathname)){res.setHeader('Content-Type','application/javascript');res.end(fs.readFileSync(path.join(roots[0],url.pathname.slice(1))));return;}
+ if(['/static/analytics.js','/static/navigation.js','/static/export.js','/static/home-month.js','/static/theme.js'].includes(url.pathname)){res.setHeader('Content-Type','application/javascript');res.end(fs.readFileSync(path.join(roots[0],url.pathname.slice(1))));return;}
  if(url.pathname.endsWith('style.css')){const i=Number(url.searchParams.get('index')||0);res.setHeader('Content-Type','text/css');res.end(fs.readFileSync(path.join(roots[i],'static/style.css')));return;}
  if(!/^\/0$/.test(url.pathname)){res.statusCode=404;res.end();return;}
  const index=Number(url.pathname.slice(1)),attack=url.searchParams.get('normal')!=='1';

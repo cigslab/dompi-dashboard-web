@@ -4,7 +4,10 @@ from unittest.mock import patch
 from test_dashboard_auth import DashboardAuthTests, api, signed, ENDPOINTS
 
 class PaidDashboardTests(unittest.TestCase):
-    setUp=DashboardAuthTests.setUp
+    def setUp(self):
+        DashboardAuthTests.setUp(self)
+        self.db.execute("UPDATE users SET plan='free', pro_until=NULL")
+        self.db.commit()
     request=DashboardAuthTests.request
     def test_unpaid_all_feature_reads_and_writes_denied(self):
         before=list(self.db.iterdump())
