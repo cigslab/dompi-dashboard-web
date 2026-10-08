@@ -1,12 +1,32 @@
 {% extends "legal_base.html" %}
-{% block title %}Bantuan &amp; Feedback{% endblock %}
+{% block title %}Bantuan{% endblock %}
+{% block theme_head %}<script src="{{ url_for('static', filename='theme.js') }}"></script>{% endblock %}
+{% block extra_style %}<link rel="stylesheet" href="{{ url_for('static', filename='help.css') }}">{% endblock %}
 {% block content %}
-<h1>Bantuan &amp; Feedback</h1>
-<p class="intro">Panduan singkat agar pencatatan keuanganmu tetap lancar.</p>
+<h1>Bantuan</h1>
+<p class="intro">Panduan singkat untuk mencatat dan merapikan keuanganmu.</p>
 <p><a href="https://t.me/catetexpbot">Buka bot Dompi di Telegram →</a></p>
-<section><h2>Mulai menggunakan Dompi</h2><p>Kirim pengeluaran seperti <code>kopi 18k</code> atau pemasukan seperti <code>+ gaji 5jt</code> ke bot. Kamu juga dapat mengirim foto struk yang jelas. Periksa balasan bot dan hasil pencatatannya.</p><p>Buka dashboard melalui tombol di bot. Beranda menampilkan ringkasan, Transaksi untuk melihat serta mengoreksi catatan, Analitik untuk tren dan kategori, dan Akun untuk profil serta pemakaian. Gunakan <code>/help</code> di bot untuk panduan dan <code>/history</code> untuk transaksi terakhir. Untuk paket dan pemakaian, buka halaman <strong>Akun</strong> di Mini App.</p></section>
-<section><h2>Transaksi tidak masuk</h2><p>Periksa koneksi dan balasan bot, lalu cek <code>/history</code> sebelum mengirim ulang agar tidak tercatat dua kali. Pastikan nominal ditulis jelas dalam Rupiah. Periksa juga paket dan sisa kuota di halaman <strong>Akun</strong> di Mini App; menghapus transaksi tidak mengembalikan kuota.</p><p>Jika catatan belum terlihat di dashboard, buka kembali dashboard dari bot dan pastikan kamu memakai akun Telegram yang sama. Catat pesan error jika masalah berlanjut.</p></section>
-<section><h2>Foto struk gagal dibaca</h2><p>Gunakan foto terang, fokus, tidak terpotong, dan pastikan angka terbaca. Hindari pantulan cahaya. Periksa transaksi terakhir sebelum mencoba lagi; jika tetap gagal, catat secara manual melalui pesan teks. Periksa nominal, tanggal, dan kategori hasil pembacaan sebelum mengandalkannya.</p></section>
-<section><h2>Dashboard tidak tampil</h2><p>Tutup lalu buka kembali dashboard melalui tombol di bot Dompi agar autentikasi Telegram diperbarui. Periksa koneksi dan coba gunakan aplikasi Telegram yang telah diperbarui. Jika muncul tombol Coba lagi, gunakan tombol tersebut. Jangan membagikan tautan autentikasi, kode login, atau token kepada siapa pun.</p></section>
-<section><h2>Mengirim feedback</h2><p>Siapkan deskripsi singkat masalah atau saran, langkah yang kamu lakukan, waktu kejadian, dan pesan error. Jika menyertakan screenshot, tutupi data pribadi dan transaksi yang tidak relevan.</p><p>Kirim saran atau laporan masalah ke <a href="https://t.me/pakedompi">@pakedompi di Telegram</a>. Untuk panduan penggunaan bot, buka <a href="https://t.me/catetexpbot">@catetexpbot</a> dan kirim <code>/help</code>. Jangan kirim feedback sebagai pesan transaksi ke bot: pesan biasa dapat diproses sebagai catatan keuangan.</p></section>
+<section><h2>Mulai cepat</h2><ol>
+<li><strong>Pengeluaran:</strong> kirim nama transaksi dan nominal, seperti <code>kopi 18k</code>.</li>
+<li><strong>Pemasukan:</strong> awali dengan tanda <code>+</code>, seperti <code>+ gaji 5jt</code>.</li>
+<li><strong>Foto Struk (Pro):</strong> kirim foto yang jelas, periksa preview, lalu tekan <strong>Simpan</strong>.</li>
+</ol><p>Periksa balasan bot untuk memastikan pencatatan berhasil. Buka dashboard melalui tombol <strong>Buka Dompi</strong> di bot.</p></section>
+<section><h2>Contoh input</h2><p>Satu transaksi per baris. Kamu juga bisa mengirim beberapa baris dalam satu pesan:</p><pre><code>kopi 18k
+makan 25rb
++ gaji 5jt</code></pre><p>Nominal dalam Rupiah: <code>18k</code> = Rp18.000, <code>25rb</code> = Rp25.000, dan <code>5jt</code> = Rp5.000.000.</p></section>
+<section><h2>Perintah Dompi</h2><dl>
+<dt><code>/start</code></dt><dd>Mulai atau buka menu Dompi.</dd>
+<dt><code>/today</code></dt><dd>Lihat rekap hari ini.</dd>
+<dt><code>/history</code></dt><dd>Lihat transaksi terakhir.</dd>
+<dt><code>/month</code></dt><dd>Lihat rekap bulan ini.</dd>
+<dt><code>/help</code></dt><dd>Buka panduan singkat di bot.</dd>
+</dl></section>
+<section><h2>Foto Struk</h2><p>Kirim foto terang, fokus, dan tidak terpotong. Dompi mencoba membaca merchant, total, item, serta tanggal jika tersedia. Hasil pembacaan bisa keliru; periksa preview sebelum <strong>Simpan</strong>, atau gunakan <strong>Edit</strong> dan <strong>Batal</strong>.</p><p>Jika total item berbeda dari total akhir, periksa kemungkinan diskon, pajak, atau biaya lain. Jika foto gagal dibaca, coba foto yang lebih jelas atau catat lewat chat. Periksa riwayat sebelum mengirim ulang agar tidak mencatat dua kali.</p></section>
+<section><h2>Paket &amp; batas</h2><p>Dompi membutuhkan paket Starter atau Pro yang aktif. Starter memiliki batas pencatatan bulanan; Pro mencakup pencatatan tanpa batas, Foto Struk, analitik lengkap, dan export CSV.</p><p>Lihat <strong>Akun → Paket &amp; pemakaian</strong> di dashboard untuk plan aktif, batas, dan pemakaian terbaru sesuai akunmu. Menghapus transaksi tidak mengembalikan kuota. Angka pemakaian Pro tetap ditampilkan sebagai informasi.</p></section>
+<section><h2>FAQ</h2>
+<details><summary>Transaksi tidak muncul?</summary><p>Periksa balasan bot dan <code>/history</code> sebelum mengirim ulang. Di dashboard, periksa bulan serta filter yang dipilih dan pastikan akun Telegram sama. Cek paket dan pemakaian di Akun.</p></details>
+<details><summary>Salah nominal atau kategori? Bagaimana edit/hapus?</summary><p>Buka <strong>Transaksi</strong>, cari catatannya, lalu pilih <strong>Edit</strong> untuk memperbaiki nominal, kategori, catatan, atau jenis transaksi. Pilih <strong>Hapus</strong> untuk menghapus satu transaksi dan periksa konfirmasinya sebelum melanjutkan.</p></details>
+<details><summary>Dashboard gagal memuat?</summary><p>Tutup lalu buka kembali melalui tombol <strong>Buka Dompi</strong> di bot agar autentikasi Telegram diperbarui. Periksa koneksi, gunakan Telegram terbaru, dan tekan <strong>Coba lagi</strong> jika tersedia. Jangan bagikan tautan autentikasi, kode login, atau token.</p></details>
+</section>
+<section><h2>Feedback</h2><p>Kirim saran atau masalah ke <a href="https://t.me/pakedompi">@pakedompi di Telegram</a>. Sertakan langkah yang dilakukan dan pesan error; tutupi data pribadi pada screenshot.</p><p>Jangan kirim feedback sebagai pesan biasa ke bot pencatatan karena dapat diproses sebagai transaksi.</p></section>
 {% endblock %}

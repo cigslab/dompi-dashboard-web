@@ -7,7 +7,7 @@ from test_dashboard_auth import api
 class PublicPageTests(unittest.TestCase):
     def test_public_legal_pages_without_auth_or_database(self):
         with patch.object(api, 'get_connection') as connection:
-            for route, title in (('/privacy', 'Kebijakan Privasi'), ('/terms', 'Syarat &amp; Ketentuan'), ('/help', 'Bantuan &amp; Feedback'), ('/upgrade', 'Upgrade ke Pro')):
+            for route, title in (('/privacy', 'Kebijakan Privasi'), ('/terms', 'Syarat &amp; Ketentuan'), ('/help', 'Bantuan'), ('/upgrade', 'Upgrade ke Pro')):
                 with self.subTest(route=route):
                     response = api.app.test_client().get(route)
                     self.assertEqual(response.status_code, 200)
@@ -15,7 +15,7 @@ class PublicPageTests(unittest.TestCase):
                     self.assertIn('<h1>' + title + '</h1>', html)
                     self.assertIn('lang="id"', html)
                     self.assertIn('/static/legal.css', html)
-                    if route != '/upgrade':
+                    if route not in ('/upgrade', '/help'):
                         self.assertNotIn('<script', html)
                     self.assertNotIn('test-init-data', html)
             connection.assert_not_called()
@@ -42,3 +42,15 @@ class PublicPageTests(unittest.TestCase):
         with patch.object(api, 'get_connection') as connection:
             self.assertEqual(api.app.test_client().get('/api/account').status_code, 401)
             connection.assert_not_called()
+
+    def test_help_content_and_theme_are_static_and_safe(self):
+        html = api.app.test_client().get('/help?name=<script>alert(1)</script>').get_data(as_text=True)
+        for label in ('Mulai cepat', 'Contoh input', 'Perintah Dompi', 'Foto Struk', 'Paket &amp; batas', 'FAQ', 'Feedback', 'kopi 18k', 'makan 25rb', '+ gaji 5jt'):
+            self.assertIn(label, html)
+        self.assertIn('/static/theme.js', html)
+        self.assertIn('/static/help.css', html)
+        self.assertNotIn('alert(1)', html)
+        self.assertNotIn('150', html)
+        self.assertNotIn('innerHTML', html)
+        for command in ('/start', '/today', '/history', '/month', '/help'):
+            self.assertIn('<code>' + command + '</code>', html)

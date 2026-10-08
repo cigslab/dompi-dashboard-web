@@ -1,0 +1,16 @@
+/* Help-only theme: legal and checkout pages retain their existing styles. */
+:root { color-scheme: light; --help-bg: #f7f8f4; --help-surface: #fff; --help-text: #15251c; --help-muted: #53655a; --help-border: #c8e0cf; --help-accent: #176637; --help-soft: #ecf8f0; background: var(--help-bg); color: var(--help-text); }
+:root[data-theme="dark"] { color-scheme: dark; --help-bg: #0d1411; --help-surface: #151e19; --help-text: #edf5ef; --help-muted: #afc0b4; --help-border: #40564a; --help-accent: #8feaab; --help-soft: #203d2b; }
+a, .eyebrow { color: var(--help-accent); }
+p, .brand span { color: var(--help-muted); }
+header, footer { border-color: var(--help-border); }
+section { background: var(--help-surface); border: 1px solid var(--help-border); border-radius: 16px; padding: 20px; margin-top: 18px; }
+section p:last-child { margin-bottom: 0; }
+ol { padding-left: 22px; } li + li { margin-top: 10px; }
+pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 16px; background: var(--help-soft); border-radius: 10px; }
+code { color: var(--help-accent); }
+dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px 18px; margin-bottom: 0; } dd { margin: 0; }
+details + details { border-top: 1px solid var(--help-border); }
+summary { cursor: pointer; padding: 14px 0; font-weight: 600; }
+:focus-visible { outline: 2px solid var(--help-accent); outline-offset: 4px; }
+.skip-link { background: var(--help-surface); }
