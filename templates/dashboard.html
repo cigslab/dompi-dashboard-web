@@ -56,7 +56,7 @@
                         <h2 id="accountFeaturesHeading">Fitur paket</h2>
                         <ul>
                             <li><span>Foto Struk</span><a id="accountReceiptLock" href="/upgrade" aria-label="Foto Struk terkunci, upgrade ke Pro" hidden>Terkunci · Pro →</a><span id="accountReceiptStatus"></span></li>
-                            <li><span>Analitik lanjutan</span><a id="accountAdvancedLock" href="/upgrade" aria-label="Analitik lanjutan terkunci, upgrade ke Pro" hidden>Terkunci · Pro →</a><span id="accountAdvancedStatus"></span></li>
+                            <li><span>Dashboard Analitik</span><a id="accountAnalyticsLock" href="/upgrade" aria-label="Dashboard Analitik terkunci, upgrade ke Pro" hidden>Terkunci · Pro →</a><span id="accountAnalyticsStatus"></span></li>
                         </ul>
                         <p id="accountFeatureNote" class="account-caption"></p>
                     </section>
@@ -631,20 +631,17 @@ async function loadAccountUsage() {
             : isFree ? "Paket Free" : "Status paket perlu ditinjau";
         plan.hidden = false;
         document.getElementById("accountUpgradeAction").hidden = !(isFree || isStarter);
-        document.getElementById("accountFeatures").hidden = !(isStarter || isPro || reviewed);
-        for (const feature of ["Receipt", "Export", "Advanced"]) {
+        document.getElementById("accountFeatures").hidden = !(isPro && !reviewed);
+        for (const feature of ["Receipt", "Export", "Analytics"]) {
             const lock = document.getElementById("account" + feature + "Lock");
             const status = document.getElementById("account" + feature + "Status");
             lock.hidden = !(isStarter || (feature === "Export" && isFree));
             status.hidden = !lock.hidden;
-            status.textContent = reviewed ? "Perlu ditinjau" : ["Receipt", "Export"].includes(feature) && isPro ? "Aktif" : "Belum tersedia";
+            status.textContent = reviewed ? "Perlu ditinjau" : isPro ? "Aktif" : "Terkunci · Pro";
         }
         document.getElementById("accountExportPanel").hidden = false;
         document.getElementById("accountExportControls").hidden = !(isPro && !reviewed);
-        document.getElementById("accountFeatureNote").textContent = reviewed
-            ? "Status akun perlu ditinjau. Hubungi Bantuan & Feedback."
-            : isStarter ? "Analitik lanjutan belum tersedia."
-            : "Foto Struk digunakan melalui bot Telegram. Analitik lanjutan belum tersedia.";
+        document.getElementById("accountFeatureNote").textContent = "Foto Struk digunakan melalui bot Telegram.";
         const joined = document.getElementById("accountJoined");
         joined.textContent = formatAccountJoined(data.joined_at);
         joined.hidden = !joined.textContent;
@@ -655,6 +652,10 @@ async function loadAccountUsage() {
         const number = value => new Intl.NumberFormat("id-ID").format(value);
         if (isPro && !reviewed) {
             output.textContent = "Unlimited — pencatatan tanpa batas";
+            quotaNote.textContent = validUsage
+                ? number(data.monthly_usage) + " pencatatan bulan ini"
+                : "Pemakaian bulan ini belum tersedia.";
+            quotaNote.hidden = false;
         } else if ((isFree || isStarter) && validUsage && validLimit) {
             output.textContent = number(data.monthly_usage) + " / " + number(monthlyLimit) + (isStarter ? " transaksi bulan ini" : " pencatatan bulan ini");
             progress.max = monthlyLimit;

@@ -75,7 +75,7 @@ class AccountEntitlementTests(unittest.TestCase):
             response = api.app.test_client().get('/')
             self.assertEqual(response.status_code, 200)
             html = response.get_data(as_text=True)
-            for feature in ('Receipt', 'Export', 'Advanced'):
+            for feature in ('Receipt', 'Export', 'Analytics'):
                 self.assertIn(f'id="account{feature}Lock" href="/upgrade"', html)
             self.assertIn('id="accountUpgradeAction" hidden', html)
             self.assertIn('aria-labelledby="accountFeaturesHeading" hidden', html)

@@ -37,12 +37,12 @@ let checks=0;
   assert.equal(el('QuotaProgress').max,150);assert.equal(el('QuotaProgress').hidden,false);
   assert.equal(el('QuotaRemaining').textContent,'Tersisa 1 pencatatan bulan ini');
   assert.equal(el('UpgradeAction').hidden,false);
-  for(const feature of ['Receipt','Export','Advanced']) {
+  for(const feature of ['Receipt','Export','Analytics']) {
     assert.equal(el(feature+'Lock').hidden,false);
     assert.match(html,new RegExp('id="account'+feature+'Lock" href="/upgrade"'));
   }
   assert.equal(el('ExportControls').hidden,true);
-  assert.match(el('FeatureNote').textContent,/belum tersedia/);checks++;
+  assert.equal(el('Features').hidden,true);checks++;
   await render(ent('starter','starter_lifetime'),{monthly_usage:170});
   assert.equal(el('QuotaProgress').value,150);assert.match(el('Usage').textContent,/170 \/ 150/);checks++;
   await render(ent('pro','pro_lifetime'),{plan:'free'});
@@ -50,15 +50,22 @@ let checks=0;
   assert.equal(el('UpgradeAction').hidden,true);assert.equal(el('QuotaProgress').hidden,true);
   assert.equal(el('QuotaRemaining').hidden,true);assert.equal(el('ReceiptStatus').textContent,'Aktif');
   assert.equal(el('ExportStatus').textContent,'Aktif');
+  assert.equal(el('QuotaNote').textContent,'37 pencatatan bulan ini');
+  assert.equal(el('QuotaNote').hidden,false);
   assert.equal(el('ExportControls').hidden,false);
-  assert.equal(el('AdvancedStatus').textContent,'Belum tersedia');checks++;
+  assert.equal(el('AnalyticsStatus').textContent,'Aktif');
+  assert.equal(el('Features').hidden,false);
+  assert.doesNotMatch(el('FeatureNote').textContent,/belum tersedia/i);
+  assert(!html.includes('Analitik lanjutan'));checks++;
+  await render(ent('pro','pro_lifetime'), {monthly_usage:null});
+  assert.equal(el('QuotaNote').textContent,'Pemakaian bulan ini belum tersedia.');
   await render(ent('pro','pro_legacy',{legacy_expires_at:'2099-01-01T00:00:00',lifetime:true}));
   assert.equal(el('Plan').textContent,'Pro aktif sampai 1 Jan 2099');assert.equal(el('UpgradeAction').hidden,true);
   assert.equal(el('ReceiptStatus').textContent,'Aktif');assert.equal(el('ExportControls').hidden,false);checks++;
   for(const entitlement of [ent('pro','pro_lifetime',{requires_review:true}),ent(null,null,{requires_review:true}),undefined,ent('starter','pro_lifetime')]) {
     await render(entitlement);
     assert.equal(el('ExportControls').hidden,true);
-    assert.notEqual(el('ReceiptStatus').textContent,'Aktif');assert.doesNotMatch(el('Usage').textContent,/Unlimited/);
+    assert.equal(el('Features').hidden,true);assert.notEqual(el('ReceiptStatus').textContent,'Aktif');assert.doesNotMatch(el('Usage').textContent,/Unlimited/);
   } checks++;
   const attack='<img src=x onerror=alert(1)>';
   await render(ent('pro','pro_legacy',{legacy_expires_at:attack}),{joined_at:attack,monthly_usage:attack});

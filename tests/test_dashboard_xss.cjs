@@ -147,7 +147,7 @@ async function runTests(index,attack){
     window.__accountUsage=149;await loadAccountUsage();
     eq(document.querySelector('#accountPlan').textContent,'Starter Lifetime','Starter badge');
     eq(document.querySelector('#accountUsage').textContent,'149 / 150 transaksi bulan ini','Starter quota');
-    for(const name of ['Receipt','Export','Advanced']) {
+    for(const name of ['Receipt','Export','Analytics']) {
       eq(document.querySelector('#account'+name+'Lock').hidden,false,'Starter feature lock '+name);
       eq(document.querySelector('#account'+name+'Lock').getAttribute('href'),'/upgrade','locked feature upgrade route');
     }
@@ -156,7 +156,8 @@ async function runTests(index,attack){
     eq(document.querySelector('#accountReceiptStatus').textContent,'Aktif','Pro receipt active');
     eq(document.querySelector('#accountExportStatus').textContent,'Aktif','Pro export active');
     eq(document.querySelector('#accountExportControls').hidden,false,'Pro export controls visible');
-    eq(document.querySelector('#accountAdvancedStatus').textContent,'Belum tersedia','advanced not yet available');
+    eq(document.querySelector('#accountAnalyticsStatus').textContent,'Aktif','Pro analytics active');
+    eq(document.querySelector('#accountFeatures').hidden,false,'Pro active features visible');
     for(const id of ['accountExportPanel','accountExportPeriod','accountExportDownload']) {
       const el=document.getElementById(id), rect=el.getBoundingClientRect();
       eq(rect.left>=0&&rect.right<=innerWidth,true,'export within viewport '+id);
