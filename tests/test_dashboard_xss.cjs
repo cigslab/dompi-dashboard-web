@@ -28,11 +28,18 @@ function setup(attack) {
     amount:(i+1)*1000,date,type:i===1?'income':'expense',currency:attack?payloads[0]:'IDR'}));
   if(attack){transactions[2].type='expense" onclick="window.__dompiXss = 4';transactions[3].transaction_id='4"><img src=x onerror="window.__dompiXss = 5">';}
   window.__testTransactions=transactions;
+  window.__accountPlan=new URL(location.href).searchParams.has('access')?'starter':'pro';
+  window.__deniedPro=0;
   window.__reportFetch=window.fetch.bind(window);
   window.fetch=async (url,options={})=>{
     const pathname=new URL(url,location.href).pathname;
     window.__testCalls.push({path:pathname,query:new URL(url,location.href).search,method:options.method||'GET',body:options.body,auth:new Headers(options.headers).get('Authorization')});
     let data;
+    if(['/api/categories','/api/cashflow','/api/analytics/monthly','/api/categories/breakdown','/api/categories/transactions','/api/reports'].includes(pathname)) {
+      const entitlement=window.__accountEntitlement;
+      const pro=entitlement ? entitlement.effective_plan==='pro' && entitlement.requires_review===false : window.__accountPlan==='pro'&&!window.__unknownAccount;
+      if(!pro) {window.__deniedPro++;return new Response(JSON.stringify({error:'pro_required'}),{status:403});}
+    }
     const fixtureKey={'/api/analytics/monthly':'monthly','/api/categories/breakdown':'categories','/api/categories/review':'reviews'}[pathname];
     if(window.__analyticsFixture&&fixtureKey) {
       const captured=JSON.stringify(window.__analyticsFixture[fixtureKey]);
@@ -42,7 +49,7 @@ function setup(attack) {
     }
 
     if(pathname==='/api/profile') { if(window.__profileError) return new Response('{}',{status:500}); data={display_name:attack?payloads[0]:'Nama A',username:window.__noUsername?null:(attack?payloads[1]:'user_a')}; }
-    else if(pathname==='/api/account') { if(window.__accountError) return new Response('{}',{status:500}); data={entitlement:window.__accountEntitlement??{effective_plan:window.__unknownAccount?null:(window.__accountPlan||'free'),entitlement_source:window.__unknownAccount?null:(window.__accountPlan==='pro'?'pro_lifetime':'free'),requires_review:!!window.__unknownAccount,lifetime:window.__accountPlan==='pro',legacy_expires_at:null},plan:window.__unknownAccount?null:(window.__accountPlan||'free'),monthly_usage:window.__unknownAccount?null:(window.__accountUsage??37),usage_month:month,joined_at:window.__accountJoined??'2026-09-07',free_monthly_limit:window.__accountLimit??null}; }
+    else if(pathname==='/api/account') { if(window.__accountError) return new Response('{}',{status:500}); data={entitlement:window.__accountEntitlement??{effective_plan:window.__unknownAccount?null:(window.__accountPlan||'free'),entitlement_source:window.__unknownAccount?null:(window.__accountPlan==='pro'?'pro_lifetime':window.__accountPlan==='starter'?'starter_lifetime':'free'),requires_review:!!window.__unknownAccount,lifetime:window.__accountPlan==='pro',legacy_expires_at:null},plan:window.__unknownAccount?null:(window.__accountPlan||'free'),monthly_usage:window.__unknownAccount?null:(window.__accountUsage??37),usage_month:month,joined_at:window.__accountJoined??'2026-09-07',free_monthly_limit:window.__accountLimit??null}; }
     else if(pathname==='/api/export/transactions') { await new Promise(r=>setTimeout(r,100)); return new Response('date,type,description,analytics_category,amount,note\r\n',{status:window.__exportError?500:200,headers:{'Content-Type':'text/csv; charset=utf-8','Content-Disposition':'attachment; filename="dompi-export-2026-09-19.csv"'}}); }
     else if(pathname==='/api/transactions/reset') { if(options.method==='DELETE') { await new Promise(r=>setTimeout(r,100)); data={success:true}; } else data={count:4,token:'test-reset-token'}; }
     else if(pathname.endsWith('/type-review/confirm')) { window.__typeReviewFixture={items:[],count:0,has_more:false}; data={success:true}; }
@@ -65,7 +72,20 @@ function setup(attack) {
     else if(pathname==='/api/transactions/type-review') data=window.__typeReviewFixture||{items:[],count:0,has_more:false};
     else if(pathname==='/api/categories/review') data={items:[]};
     else if(pathname==='/api/categories/transactions') data={items:[],has_more:false};
-    else if(pathname==='/api/transactions') data=transactions;
+    else if(pathname==='/api/transactions') {
+      const params=new URL(url,location.href).searchParams;
+      if(params.get('view')==='list') {
+        const source=window.__listFixture||transactions;
+        const q=(params.get('q')||'').toLowerCase(), kind=params.get('type');
+        const filtered=source.filter(item=>(!params.get('month')||item.date.startsWith(params.get('month')))
+          &&(!kind||kind==='all'||item.type===kind)
+          &&(!q||[item.category,item.note,item.analytics_category,String(item.amount)].some(v=>String(v).toLowerCase().includes(q)))
+          &&(!params.get('start')||item.date>=params.get('start'))&&(!params.get('end')||item.date<=params.get('end'))
+          &&(!params.get('cursor')||item.transaction_id<Number(params.get('cursor'))));
+        const items=filtered.slice(0,10);
+        data={items,has_more:filtered.length>10,next_cursor:filtered.length>10?String(items.at(-1).transaction_id):null};
+      } else data=transactions;
+    }
     else throw new Error('Unexpected mocked API '+pathname);
     return new Response(JSON.stringify(data),{headers:{'Content-Type':'application/json'}});
   };
@@ -101,7 +121,8 @@ async function runTests(index,attack){
       eq(getComputedStyle(document.querySelector('.menu')).position,'static','no fixed bottom navigation');
     }
 
-    eq(document.querySelector('#accountPlan').textContent,'Paket Free','backend plan rendered');
+    eq(document.querySelector('#accountPlan').textContent,'Pro Lifetime','backend plan rendered');
+    window.__accountPlan='free';
     send('#accountMenu','click');await wait();
     eq(document.querySelector('#accountPage').classList.contains('page-hidden'),false,'account visible');
     await wait();await wait();
@@ -180,6 +201,8 @@ async function runTests(index,attack){
     window.__accountLimit=50;window.__unknownAccount=true;await loadAccountUsage();
     eq(document.querySelector('#accountQuotaProgress').hidden,true,'unknown usage hides progress');
     window.__unknownAccount=false;window.__accountUsage=37;window.__accountLimit=null;
+    window.__accountPlan='pro';await loadAccountUsage();
+    await Promise.all([loadCategories(),loadCashflowChart(),window.loadAnalytics()]);
 
     eq(document.querySelectorAll('main > :not(.page-hidden):not(dialog)').length,1,'one visible page');
     send('#overviewMenu','click');
@@ -214,17 +237,17 @@ async function runTests(index,attack){
     }
     send('#transactionMenu','click');
     const search=document.querySelector('#transactionSearch');
-    search.value=attack?'quotes':'Kopi';send('#transactionSearch','input');
+    search.value=attack?'quotes':'Kopi';send('#transactionSearch','input');await wait();
     const shown=()=>Array.from(document.querySelectorAll('.all-transaction-item')).filter(e=>e.style.display!=='none').length;
     eq(shown(),1,'search');
-    search.value='';send('#transactionSearch','input');
-    document.querySelector('#transactionType').value='income';send('#transactionType','change');
+    search.value='';send('#transactionSearch','input');await wait();
+    document.querySelector('#transactionType').value='income';send('#transactionType','change');await wait();
     eq(shown(),1,'type filter');
-    document.querySelector('#transactionType').value='all';send('#transactionType','change');
+    document.querySelector('#transactionType').value='all';send('#transactionType','change');await wait();
     eq(shown(),4,'filter reset');
     const months=document.querySelector('#transactionMonth');
     const choice=Array.from(months.options).find(o=>/^\d{4}-\d{2}$/.test(o.value));
-    if(choice){months.value=choice.value;send('#transactionMonth','change');eq(shown(),4,'month filter');}
+    if(choice){months.value=choice.value;send('#transactionMonth','change');await wait();eq(shown(),4,'month filter');}
     eq(window.__testCalls.every(c=>c.auth==='tma test-init-data'),true,'auth header preserved');
     eq(window.__dompiXss,0,'no execution after rerender');
     eq(window.__testErrors,[],'no errors after interaction');
@@ -309,6 +332,9 @@ async function runExportTests(index,attack) {
   }
 }
 async function runAnalyticsTests(index,attack) {
+  // Observe analytics after the independent DOMContentLoaded list bootstrap settles.
+  if(document.readyState==='loading') await new Promise(resolve=>document.addEventListener('DOMContentLoaded',resolve,{once:true}));
+  await loadTransactions();
   let result;
   try { result={scope:'analytics',pass:true,index,attack,checks:await window.analyticsChecks(attack),width:innerWidth}; }
   catch(error) { result={scope:'analytics',pass:false,index,attack,error:String(error),width:innerWidth}; }
@@ -388,25 +414,103 @@ async function runTypeReviewTests() {
   await window.__reportFetch('/results',{method:'POST',body:JSON.stringify(result)});
   const report=document.createElement('pre');report.id='xssTestResults';report.style.cssText='white-space:pre-wrap;overflow-wrap:anywhere';report.textContent=JSON.stringify(result);document.body.prepend(report);
 }
+async function runAccessTests(index,attack) {
+  let checks=0;
+  const check=(value,label)=>{if(!value)throw Error(label);checks++;};
+  const wait=()=>new Promise(r=>setTimeout(r,40));
+  const proPaths=['/api/categories','/api/cashflow','/api/analytics/monthly','/api/categories/breakdown'];
+  const proCount=()=>window.__testCalls.filter(c=>proPaths.includes(c.path)).length;
+  let result;
+  try {
+    await wait();await wait();
+    check(proCount()===0,'Starter first load makes no Pro requests');
+    check(document.querySelector('[data-pro-state]').textContent.includes('Tersedia untuk Pro'),'Starter label');
+    check(document.querySelector('#income').textContent.includes('2.000'),'Starter summary');
+    check(document.querySelectorAll('#transactionList .transaction-item').length===4,'Starter recent');
+    check(!document.querySelector('#donutMonth').hidden,'month navigation remains');
+    const month=document.querySelector('#donutMonth');month.value=month.options[2].value;month.dispatchEvent(new Event('change'));
+    await loadTransactions();await Promise.all([loadCategories(),loadCashflowChart(),window.loadAnalytics()]);
+    document.querySelector('#transactionMenu').click();
+    document.querySelector('.transaction-edit-button').click();document.querySelector('#saveEditTransaction').click();
+    for(let i=0;i<50&&!document.querySelector('#editTransactionModal').classList.contains('hidden');i++)await wait();
+    await wait();document.querySelector('.transaction-delete-button').click();await wait();await wait();
+    check(window.__testCalls.some(c=>c.method==='PATCH')&&window.__testCalls.some(c=>c.method==='DELETE'),'mutations exercised');
+    check(proCount()===0&&window.__deniedPro===0,'refresh/month/edit/delete respect gate');
+    window.__unknownAccount=true;await loadAccountUsage();await window.loadAnalytics();
+    check(document.querySelector('[data-pro-state]').textContent.includes('belum dapat dipastikan'),'unknown distinct');
+    check(!document.querySelector('[data-pro-retry]').hidden,'unknown retry');
+    check(proCount()===0,'unknown no Pro calls');
+    window.__accountError=true;await loadAccountUsage();await loadCategories();check(proCount()===0,'error no Pro calls');
+    window.__accountError=false;window.__unknownAccount=false;window.__accountPlan='pro';
+    document.querySelector('[data-pro-retry]').click();
+    for(let i=0;i<50&&proCount()<4;i++)await wait();
+    check(proPaths.every(p=>window.__testCalls.some(c=>c.path===p)),'Pro retry loads all panels');
+    window.__accountEntitlement={effective_plan:'pro',entitlement_source:'pro_legacy',requires_review:false,legacy_expires_at:'2099-01-01T00:00:00'};
+    await loadAccountUsage();const before=proCount();await Promise.all([loadCategories(),loadCashflowChart(),window.loadAnalytics()]);
+    check(proCount()>before,'legacy Pro loads');check(window.__deniedPro===0,'no avoidable 403');
+    check(document.documentElement.scrollWidth<=innerWidth,'no overflow');
+    result={scope:'access',pass:true,checks,width:innerWidth};
+  } catch(error){result={scope:'access',pass:false,checks,error:String(error),width:innerWidth};}
+  await window.__reportFetch('/results',{method:'POST',body:JSON.stringify(result)});
+  const report=document.createElement('pre');report.id='xssTestResults';report.textContent=JSON.stringify(result);document.body.prepend(report);
+}
+async function runListTests(index,attack) {
+  let checks=0;
+  const check=(value,label)=>{if(!value)throw Error(label);checks++;};
+  const month=new Date().toISOString().slice(0,7);
+  let result;
+  try {
+    if(document.readyState==='loading') await new Promise(resolve=>document.addEventListener('DOMContentLoaded',resolve,{once:true}));
+    window.__listFixture=Array.from({length:25},(_,i)=>({transaction_id:25-i,category:'kopi '+(25-i),note:'<img src=x onerror=alert(1)>',analytics_category:'Makan & Minum',amount:1000,date:month+'-01',type:'expense',currency:'IDR'}));
+    await loadTransactions();document.querySelector('#transactionMenu').click();
+    check(document.querySelectorAll('.all-transaction-item').length===10,'first page');
+    await Promise.all([loadTransactionPage(true),loadTransactionPage(true)]);await loadTransactionPage(true);
+    const ids=[...document.querySelectorAll('.transaction-edit-button')].map(e=>e.dataset.transactionId);
+    check(ids.length===25&&new Set(ids).size===25,'pagination no duplicates/missing');
+    check(document.querySelector('#transactionLoadMore').hidden,'last page');
+    document.querySelector('#transactionSearch').value='kopi 1';await filterTransactions();
+    check(window.__testCalls.at(-1).query.includes('q=kopi+1'),'search sent to server');
+    check(!window.__testCalls.at(-1).query.includes('cursor'),'search resets cursor');
+    const filterQuery=window.__testCalls.at(-1).query;
+    await loadTransactions();check(window.__testCalls.some(c=>c.query===filterQuery),'refresh preserves filter');
+    const count=document.querySelectorAll('.all-transaction-item').length;
+    check(count===10,'server filtered page');
+    await loadTransactionPage(true);check(document.querySelectorAll('.all-transaction-item').length===11,'old matching row found');
+    const listCalls=()=>window.__testCalls.filter(c=>c.path==='/api/transactions'&&c.query.includes('view=list'));
+    for(const action of ['edit','delete']) {
+      const before=listCalls().length;
+      document.querySelector('.transaction-'+action+'-button').click();
+      if(action==='edit') document.querySelector('#saveEditTransaction').click();
+      for(let i=0;i<100&&(listCalls().length===before||document.querySelector('#transactionListStatus').textContent==='Memuat transaksi…');i++) await new Promise(r=>setTimeout(r,20));
+      check(listCalls().length>before,action+' refresh executed');
+      check(listCalls().at(-1).query===filterQuery,action+' preserves active filter and resets cursor');
+    }
+    check(document.querySelectorAll('img[src=x]').length===0,'XSS safe');
+    check(document.documentElement.scrollWidth<=innerWidth,'layout');
+    result={scope:'list',pass:true,checks,width:innerWidth};
+  } catch(error){result={scope:'list',pass:false,checks,error:String(error),width:innerWidth};}
+  await window.__reportFetch('/results',{method:'POST',body:JSON.stringify(result)});
+  const report=document.createElement('pre');report.id='xssTestResults';report.textContent=JSON.stringify(result);document.body.prepend(report);
+}
 http.createServer((req,res)=>{
  const url=new URL(req.url,'http://127.0.0.1');
  if(url.pathname==='/results'){
   if(req.method==='POST'){let body='';req.on('data',b=>body+=b);req.on('end',()=>{const result=JSON.parse(body);results[`${result.index}-${result.attack}`]=result;console.log(JSON.stringify(result));res.end('ok');});return;}
   res.setHeader('Content-Type','application/json');res.end(JSON.stringify(results));return;
  }
- if(['/static/analytics.js','/static/navigation.js','/static/export.js','/static/home-month.js','/static/theme.js'].includes(url.pathname)){res.setHeader('Content-Type','application/javascript');res.end(fs.readFileSync(path.join(roots[0],url.pathname.slice(1))));return;}
+ if(['/static/analytics.js','/static/navigation.js','/static/export.js','/static/home-month.js','/static/theme.js','/static/dashboard-access.js'].includes(url.pathname)){res.setHeader('Content-Type','application/javascript');res.end(fs.readFileSync(path.join(roots[0],url.pathname.slice(1))));return;}
  if(url.pathname.endsWith('style.css')){const i=Number(url.searchParams.get('index')||0);res.setHeader('Content-Type','text/css');res.end(fs.readFileSync(path.join(roots[i],'static/style.css')));return;}
  if(!/^\/0$/.test(url.pathname)){res.statusCode=404;res.end();return;}
  const index=Number(url.pathname.slice(1)),attack=url.searchParams.get('normal')!=='1';
  let html=fs.readFileSync(path.join(roots[index],'templates/dashboard.html'),'utf8');
  // All application innerHTML assignments must contain constant markup only.
- const applicationSource=html+'\n'+['analytics.js','navigation.js','export.js'].map(name=>fs.readFileSync(path.join(roots[index],'static',name),'utf8')).join('\n');
+ const applicationSource=html+'\n'+['analytics.js','navigation.js','export.js','dashboard-access.js'].map(name=>fs.readFileSync(path.join(roots[index],'static',name),'utf8')).join('\n');
  for(const match of applicationSource.matchAll(/\.innerHTML\s*=\s*`([\s\S]*?)`/g))assert(!match[1].includes('${'));
  assert(!/\.innerHTML\s*=\s*\n?\s*\w+\.map/.test(applicationSource));
  html=html.replace(/<script src="https:[^"]+"><\/script>/g,'');
  html=html.replace('href="../static/style.css"',`href="/static/style.css?index=${index}"`);
  html=html.replace('<head>','<head><script>('+setup.toString()+')('+attack+');</script>');
  html=html.replace('</body>','<script>window.analyticsChecks='+require('./test_analytics_ui.cjs').toString()+';</script></body>');
- html=html.replace('</body>','<script>('+(url.searchParams.get('type-review')==='1'?runTypeReviewTests:url.searchParams.get('insights')==='1'?runInsightTests:url.searchParams.get('analytics')==='1'?runAnalyticsTests:url.searchParams.get('export')==='1'?runExportTests:runTests).toString()+')('+index+','+attack+');</script></body>');
+ html=html.replace('</body>','<script>('+(url.searchParams.get('access')==='1'?runAccessTests:url.searchParams.get('list')==='1'?runListTests:url.searchParams.get('type-review')==='1'?runTypeReviewTests:url.searchParams.get('insights')==='1'?runInsightTests:url.searchParams.get('analytics')==='1'?runAnalyticsTests:url.searchParams.get('export')==='1'?runExportTests:runTests).toString()+')('+index+','+attack+');</script></body>');
  res.setHeader('Content-Type','text/html');res.end(html);
 }).listen(8765,'127.0.0.1',()=>console.log('Dashboard tests: http://127.0.0.1:8765/0; add ?normal=1 for normal-data regression.'));

@@ -182,7 +182,8 @@
         </select>
     </div>
 
-    <div class="donut-content">
+    <div class="pro-access-state" data-pro-state><p role="status">Memeriksa akses paket…</p><button type="button" data-pro-retry hidden>Coba lagi</button></div>
+    <div class="donut-content" data-pro-content hidden>
         <div class="donut-chart-wrap">
             <canvas id="expenseDonutChart"></canvas>
 
@@ -205,7 +206,8 @@
             </div>
         </div>
 
-        <div class="category-list" id="categoryList">
+        <div class="pro-access-state" data-pro-state><p role="status">Memeriksa akses paket…</p><button type="button" data-pro-retry hidden>Coba lagi</button></div>
+        <div class="category-list" id="categoryList" data-pro-content hidden>
             <p>Memuat kategori...</p>
         </div>
     </div>
@@ -255,6 +257,7 @@
                         <input
                             type="text"
                             id="transactionSearch"
+                            maxlength="200"
                             placeholder="Cari transaksi..."
                         >
                     </div>
@@ -370,12 +373,17 @@
                         </p>
                     </div>
 
+                    <div class="transaction-list-controls">
+                        <p id="transactionListStatus" role="status" aria-live="polite"></p>
+                        <button id="transactionListRetry" type="button" hidden>Coba lagi</button>
+                        <button id="transactionLoadMore" type="button" hidden>Muat lagi</button>
+                    </div>
                 </section>
             </div>
             <div id="analyticsPage" class="page-hidden">
                 <header class="page-header analytics-header">
                     <div><h1>Analitik</h1><p class="subtitle">Pahami pola keuangan kamu.</p></div>
-                    <label class="analytics-period-label">Periode
+                    <label class="analytics-period-label" data-pro-content hidden>Periode
                         <select id="analyticsPeriod">
                             <option value="1" selected>Bulan ini</option>
                             <option value="3">3 bulan terakhir</option>
@@ -384,8 +392,9 @@
                         </select>
                     </label>
                 </header>
-                <div class="analytics-tools"><p id="analyticsStatus" role="status" aria-live="polite"></p><button type="button" id="analyticsRetry" hidden>Coba lagi</button></div>
-                <section class="analytics-section analytics-summary" aria-labelledby="analyticsSummaryTitle">
+                <div class="pro-access-state" data-pro-state><p role="status">Memeriksa akses paket…</p><button type="button" data-pro-retry hidden>Coba lagi</button></div>
+                <div class="analytics-tools" data-pro-content hidden><p id="analyticsStatus" role="status" aria-live="polite"></p><button type="button" id="analyticsRetry" hidden>Coba lagi</button></div>
+                <section data-pro-content hidden class="analytics-section analytics-summary" aria-labelledby="analyticsSummaryTitle">
                     <h2 id="analyticsSummaryTitle">Ringkasan periode</h2>
                     <p id="analyticsRange" class="analytics-muted"></p>
                     <dl class="analytics-totals">
@@ -394,18 +403,18 @@
                         <div><dt>Saldo Bersih</dt><dd id="analyticsBalance">—</dd></div>
                     </dl>
                 </section>
-                <section class="analytics-section" aria-labelledby="analyticsTrendTitle">
+                <section data-pro-content hidden class="analytics-section" aria-labelledby="analyticsTrendTitle">
                     <div class="analytics-section-heading"><h2 id="analyticsTrendTitle">Tren Cashflow</h2>
                         <div class="analytics-legend"><span><i class="income-dot" aria-hidden="true"></i>Pemasukan</span><span><i class="expense-dot" aria-hidden="true"></i>Pengeluaran</span></div>
                     </div>
                     <div id="cashflowChartArea" class="analytics-chart-area"></div>
                 </section>
-                <section id="analyticsBreakdown" class="analytics-section" aria-labelledby="analyticsCategoriesTitle">
+                <section data-pro-content hidden id="analyticsBreakdown" class="analytics-section" aria-labelledby="analyticsCategoriesTitle">
                     <h2 id="analyticsCategoriesTitle">Pengeluaran per kategori</h2>
                     <p id="categoriesStatus" class="analytics-muted" role="status"></p>
                     <div id="categoriesList" class="category-ranking"></div>
                 </section>
-                <section class="analytics-section analytics-comparison" aria-labelledby="analyticsComparisonTitle">
+                <section data-pro-content hidden class="analytics-section analytics-comparison" aria-labelledby="analyticsComparisonTitle">
                     <h2 id="analyticsComparisonTitle">Perbandingan Bulanan</h2>
                     <p id="monthlyComparisonPeriod" class="analytics-muted"></p>
                     <div id="monthlyComparisonList" class="comparison-highlights"></div>
@@ -519,6 +528,7 @@ if (!telegramApp?.initData) {
     showDashboardAuthError("Buka dashboard melalui tombol di bot Dompi.");
 }
 </script>
+<script src="/static/dashboard-access.js"></script>
 <script>
 function formatAccountJoined(value) {
     if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return "";
@@ -611,9 +621,7 @@ async function loadAccountUsage() {
     document.getElementById("accountJoined").hidden = true;
     retry.hidden = true;
     try {
-        const response = await apiFetch("/api/account");
-        if (!response.ok) throw new Error("Usage unavailable");
-        const data = await response.json();
+        const data = await DashboardAccess.account(true);
         if (version !== accountUsageRequest) return;
         const plan = document.getElementById("accountPlan");
         const entitlement = data.entitlement;
@@ -733,7 +741,7 @@ renderHomeMonths();
 homeMonthSelect.addEventListener('change', () => {
     homeMonth.selected = homeMonthSelect.value;
     renderHomeMonths();
-    loadSummary(); loadCashflowChart(); loadCategories(); loadTransactions();
+    loadSummary(); loadCashflowChart(); loadCategories(); loadRecentTransactions();
 });
 </script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -746,6 +754,7 @@ const CASHFLOW_API_URL =
     "/api/cashflow";
 
 async function loadCashflowChart() {
+    if (!await DashboardAccess.allow()) return;
     const requestedMonth = homeMonth.selected;
     try {
         const response = await apiFetch(homeMonth.url(CASHFLOW_API_URL));
@@ -755,7 +764,7 @@ async function loadCashflowChart() {
         }
 
         const data = await response.json();
-        if (requestedMonth !== homeMonth.selected) return;
+        if (requestedMonth !== homeMonth.selected || !DashboardAccess.isPro()) return;
 
         const labels = data.map(item => {
             const date = new Date(item.date);
@@ -892,6 +901,7 @@ const CATEGORY_API_URL =
 let expenseDonutChartInstance = null;
 
 async function loadCategories() {
+    if (!await DashboardAccess.allow()) return;
     const categoryList =
         document.getElementById("categoryList");
 
@@ -913,7 +923,7 @@ async function loadCategories() {
         }
 
         const data = await response.json();
-        if (requestedMonth !== homeMonth.selected) return;
+        if (requestedMonth !== homeMonth.selected || !DashboardAccess.isPro()) return;
 
         // Ambil hanya data yang memiliki total > 0
         const expenseData = data.filter(
@@ -1208,37 +1218,17 @@ const TRANSACTIONS_API_URL =
     "/api/transactions";
 
 async function loadTransactions() {
-    const transactionList =
-        document.getElementById("transactionList");
-
-    const allTransactionList =
-        document.getElementById("allTransactionList");
-
+    await Promise.all([loadRecentTransactions(), loadTransactionPage()]);
+}
+async function loadRecentTransactions() {
+    const transactionList = document.getElementById('transactionList');
     const requestedMonth = homeMonth.selected;
     try {
-        const [response, recentResponse] = await Promise.all([
-            apiFetch(TRANSACTIONS_API_URL), apiFetch(homeMonth.url(TRANSACTIONS_API_URL))
-        ]);
-
-        if (!response.ok || !recentResponse.ok) {
-            throw new Error("Gagal mengambil transaksi");
-        }
-        const [data, homeData] = await Promise.all([response.json(), recentResponse.json()]);
+        const response = await apiFetch(homeMonth.url(TRANSACTIONS_API_URL));
+        if (!response.ok) throw new Error('Gagal mengambil transaksi');
+        const homeData = await response.json();
         if (requestedMonth !== homeMonth.selected) return;
-        if (data.length === 0 && homeData.length === 0) {
-
-            transactionList.innerHTML =
-                "<p>Belum ada transaksi.</p>";
-
-            allTransactionList.innerHTML =
-                "<p class='transaction-loading'>Belum ada transaksi.</p>";
-
-            return;
-        }
-
-        transactionList.innerHTML = "";
-        allTransactionList.innerHTML = "";
-
+        transactionList.replaceChildren();
         const recentTransactions = homeMonth.rows(homeData, requestedMonth).slice(0, 5);
         if (recentTransactions.length === 0) transactionList.innerHTML = '<p>Belum ada transaksi.</p>';
         recentTransactions.forEach(item => {
@@ -1289,6 +1279,57 @@ async function loadTransactions() {
             transactionList.appendChild(transactionItem);
             });
 
+
+    } catch (_) {
+        if (requestedMonth === homeMonth.selected) transactionList.textContent = 'Gagal memuat transaksi.';
+    }
+}
+let transactionListRequest = 0;
+let transactionNextCursor = null;
+let transactionListBusy = false;
+function transactionQuery() {
+    const query = new URLSearchParams({view: 'list', type: transactionType.value, q: transactionSearch.value.trim()});
+    if (transactionMonth.value !== 'date') query.set('month', transactionMonth.value);
+    else if (rangeStart && rangeEnd) {
+        query.set('start', HomeMonth.key(rangeStart) + '-' + String(rangeStart.getDate()).padStart(2, '0'));
+        query.set('end', HomeMonth.key(rangeEnd) + '-' + String(rangeEnd.getDate()).padStart(2, '0'));
+    }
+    return query;
+}
+async function loadTransactionPage(append = false) {
+    if (append && (transactionListBusy || !transactionNextCursor)) return;
+    const current = ++transactionListRequest;
+    transactionListBusy = true;
+    const list = document.getElementById('allTransactionList');
+    const status = document.getElementById('transactionListStatus');
+    const more = document.getElementById('transactionLoadMore');
+    const retry = document.getElementById('transactionListRetry');
+    more.disabled = true;
+    retry.hidden = true;
+    status.textContent = 'Memuat transaksi…';
+    if (!append) { transactionNextCursor = null; more.hidden = true; list.replaceChildren(); }
+    try {
+        const query = transactionQuery();
+        if (append) query.set('cursor', transactionNextCursor);
+        const response = await apiFetch(TRANSACTIONS_API_URL + '?' + query);
+        if (!response.ok) throw new Error('Gagal mengambil transaksi');
+        const result = await response.json();
+        if (current !== transactionListRequest) return;
+        renderTransactionRows(result.items);
+        transactionNextCursor = result.next_cursor;
+        more.hidden = !result.has_more;
+        status.textContent = list.children.length ? '' : 'Tidak ada transaksi yang cocok.';
+    } catch (_) {
+        if (current !== transactionListRequest) return;
+        status.textContent = 'Gagal memuat transaksi. Silakan coba lagi.';
+        retry.hidden = false;
+        retry.onclick = () => loadTransactionPage(append);
+    } finally {
+        if (current === transactionListRequest) { transactionListBusy = false; more.disabled = false; }
+    }
+}
+function renderTransactionRows(data) {
+    const allTransactionList = document.getElementById('allTransactionList');
             data.forEach(item => {
                 const date = new Date(item.date);
 
@@ -1383,18 +1424,9 @@ async function loadTransactions() {
             allTransactionList.appendChild(fullTransactionItem);
         });
 
-    } catch (error) {
-        console.error("Transactions error:", error);
-
-        transactionList.innerHTML =
-            "<p>Gagal memuat transaksi.</p>";
-
-        allTransactionList.innerHTML =
-            "<p class='transaction-loading'>Gagal memuat transaksi.</p>";
-    }
 }
 
-loadTransactions();
+document.addEventListener("DOMContentLoaded", loadTransactions);
 
 document.addEventListener("click", (event) => {
     const actionButton =
@@ -1904,71 +1936,8 @@ function generateTransactionMonths() {
 }
 
 generateTransactionMonths();
-function filterTransactions() {
-    const keyword =
-        transactionSearch.value.toLowerCase().trim();
-
-    const selectedType =
-        transactionType.value;
-
-    const selectedMonth =
-        transactionMonth.value;
-
-    const transactions =
-        document.querySelectorAll(".all-transaction-item");
-
-    transactions.forEach(item => {
-        const text =
-            item.textContent.toLowerCase();
-
-        const typeElement =
-            item.querySelector(".transaction-type");
-
-        const matchesSearch =
-            text.includes(keyword);
-
-        const matchesType =
-            selectedType === "all" ||
-            typeElement.classList.contains(selectedType);
-        const itemDate =
-            item.dataset.date;
-
-        let matchesDate = true;
-
-        if (selectedMonth === "date") {
-
-            if (rangeStart && rangeEnd) {
-                const startDate =
-                    `${rangeStart.getFullYear()}-${String(
-                        rangeStart.getMonth() + 1
-                    ).padStart(2, "0")}-${String(
-                        rangeStart.getDate()
-                    ).padStart(2, "0")}`;
-
-                const endDate =
-                    `${rangeEnd.getFullYear()}-${String(
-                        rangeEnd.getMonth() + 1
-                    ).padStart(2, "0")}-${String(
-                        rangeEnd.getDate()
-                    ).padStart(2, "0")}`;
-
-                matchesDate =
-                    itemDate >= startDate &&
-                    itemDate <= endDate;
-            }
-
-        } else {
-            matchesDate =
-                itemDate.startsWith(selectedMonth);
-        }
-
-        if (matchesSearch && matchesType && matchesDate) {
-            item.style.display = "";
-        } else {
-            item.style.display = "none";
-        }
-    });
-}
+function filterTransactions() { return loadTransactionPage(); }
+document.getElementById('transactionLoadMore').addEventListener('click', () => loadTransactionPage(true));
 
 transactionSearch.addEventListener(
     "input",

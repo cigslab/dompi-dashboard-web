@@ -399,6 +399,7 @@ function renderTypeReviews(data, period) {
 }
 async function loadAnalytics() {
     const request = ++analyticsRequest;
+    if (!await DashboardAccess.allow() || request !== analyticsRequest) return;
     const period = selectedPeriod();
     const query = new URLSearchParams({start: period.start, end: period.end});
     text('analyticsRange', period.months.length === 1 ? monthLabel(period.current, true) : `${monthLabel(period.months[0])} – ${monthLabel(period.current)}`);
@@ -418,7 +419,7 @@ async function loadAnalytics() {
             if (!response.ok) throw new Error('Analytics request failed');
             return response.json();
         }));
-        if (request !== analyticsRequest) return;
+        if (request !== analyticsRequest || !DashboardAccess.isPro()) return;
         renderSummary(period.months, monthly);
         renderTrend(period.months, monthly);
         renderCategories(categories, period);
@@ -428,7 +429,7 @@ async function loadAnalytics() {
         renderTypeReviews(typeReviews, period);
         text('analyticsStatus', '');
     } catch (_) {
-        if (request !== analyticsRequest) return;
+        if (request !== analyticsRequest || !DashboardAccess.isPro()) return;
         text('analyticsStatus', 'Gagal memuat analitik. Silakan coba lagi.');
         document.getElementById('analyticsRetry').hidden = false;
     }

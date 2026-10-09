@@ -15,8 +15,10 @@ for (const [, id] of html.matchAll(/id="([^"]+)"/g)) {
 }
 let data, fail=false, pending;
 const context = vm.createContext({Intl, Date, Number,
-  document: {getElementById(id) {assert(elements.has(id), id); return elements.get(id);}},
+  document: {querySelectorAll() {return [];}, addEventListener() {}, getElementById(id) {assert(elements.has(id), id); return elements.get(id);}},
   apiFetch: async url => {assert.equal(url, '/api/account'); if(pending) return pending; return {ok:!fail, json:async()=>data};}});
+context.window=context;
+vm.runInContext(fs.readFileSync(path.join(__dirname,'../static/dashboard-access.js'),'utf8'),context);
 vm.runInContext(source,context);
 const el = id => elements.get('account'+id);
 const ent = (plan,source,extra={})=>({effective_plan:plan,entitlement_source:source,requires_review:false,legacy_expires_at:null,...extra});

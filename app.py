@@ -903,12 +903,55 @@ def reset_transactions():
             conn.close()
 
 
+TRANSACTION_PAGE_SIZE = 10
+
+
+def transaction_list_filter():
+    """Validated, parameterized filters applied before keyset pagination."""
+    sql, params = home_month_filter()
+    kind = request.args.get('type', 'all')
+    if kind not in ('all', 'income', 'expense'):
+        raise ValueError('Jenis transaksi tidak valid')
+    if kind != 'all':
+        sql += ' AND type = %s'
+        params.append(kind)
+    start, end = request.args.get('start'), request.args.get('end')
+    if start is not None or end is not None:
+        for day in (start, end):
+            if not isinstance(day, str) or not re.fullmatch(r'[0-9]{4}-[0-9]{2}-[0-9]{2}', day):
+                raise ValueError('Rentang tanggal tidak valid')
+            date.fromisoformat(day)
+        if start > end:
+            raise ValueError('Rentang tanggal tidak valid')
+        sql += ' AND LEFT(date, 10) >= %s AND LEFT(date, 10) <= %s'
+        params.extend((start, end))
+    query = request.args.get('q', '').strip()
+    if len(query) > 200:
+        raise ValueError('Pencarian terlalu panjang')
+    if query:
+        # Literal substring: %, _ and the escape character are not wildcards.
+        needle = '%' + query.lower().replace('!', '!!').replace('%', '!%').replace('_', '!_') + '%'
+        columns = ('category', 'note', 'analytics_category', 'CAST(amount AS TEXT)')
+        sql += ' AND (' + ' OR '.join("LOWER(COALESCE(" + column + ", '')) LIKE %s ESCAPE '!'" for column in columns) + ')'
+        params.extend([needle] * len(columns))
+    cursor = request.args.get('cursor')
+    if cursor is not None:
+        if not re.fullmatch(r'[1-9][0-9]{0,18}', cursor) or int(cursor) > 9223372036854775807:
+            raise ValueError('Cursor tidak valid')
+        sql += ' AND transaction_id < %s'
+        params.append(int(cursor))
+    return sql, params
+
+
 @app.route("/api/transactions")
 def transactions():
     try:
-        month_sql, month_params = home_month_filter()
+        list_mode = request.args.get('view') == 'list'
+        if request.args.get('view') not in (None, 'list'):
+            raise ValueError('Mode daftar tidak valid')
+        month_sql, month_params = transaction_list_filter() if list_mode else home_month_filter()
     except ValueError:
-        return jsonify(error='Periode harus YYYY-MM'), 400
+        return jsonify(error='Filter transaksi tidak valid' if request.args.get('view') is not None else 'Periode harus YYYY-MM'), 400
     user_id = g.user_id
     conn = None
     cursor = None
@@ -934,13 +977,16 @@ def transactions():
             WHERE user_id = %s AND currency = 'IDR'{month_sql}
 
             ORDER BY transaction_id DESC
-            LIMIT 10
+            LIMIT %s
             """,
-            (user_id, *month_params)
+            (user_id, *month_params, TRANSACTION_PAGE_SIZE + 1 if list_mode else 10)
         )
 
         rows = cursor.fetchall()
 
+        has_more = list_mode and len(rows) > TRANSACTION_PAGE_SIZE
+        if list_mode:
+            rows = rows[:TRANSACTION_PAGE_SIZE]
         data = []
 
         for row in rows:
@@ -955,6 +1001,9 @@ def transactions():
                 "currency": row[7]
             })
 
+        if list_mode:
+            return jsonify(items=data, has_more=has_more,
+                           next_cursor=str(data[-1]['transaction_id']) if has_more else None)
         return jsonify(data)
 
     except Exception as e:

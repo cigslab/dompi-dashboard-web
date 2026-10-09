@@ -1457,3 +1457,10 @@ input, select, textarea { accent-color: var(--positive); }
     outline-color: var(--positive);
     background-color: var(--surface-alt);
 }
+
+.transaction-list-controls { padding: 16px; color: var(--muted); }
+.transaction-list-controls button, .pro-access-state button { min-height: 44px; margin-top: 8px; padding: 10px 16px; border: 1px solid var(--border); border-radius: 10px; background: var(--accent-soft); color: var(--text); font: inherit; cursor: pointer; }
+.transaction-list-controls button:disabled { opacity: .55; cursor: wait; }
+
+.pro-access-state { padding: 16px 0; color: var(--muted); }
+[data-pro-content][hidden], [data-pro-state][hidden] { display: none !important; }
