@@ -282,6 +282,7 @@ async function runTests(index,attack){
     eq(document.querySelector('#accountDeleteForm').hidden,true,'success prevents resubmit');
     eq(document.querySelector('#accountDeleteStatus').textContent.startsWith('Berhasil.'),true,'explicit success state');
     await wait();await wait();send('#accountDeleteClose','click');
+    checks += await window.wave1Checks();
     const result={pass:true,index,attack,checks,width:innerWidth};
     await window.__reportFetch('/results',{method:'POST',body:JSON.stringify(result)});
     const report=document.createElement('pre');report.id='xssTestResults';report.style.whiteSpace='pre-wrap';report.style.overflowWrap='anywhere';report.textContent=JSON.stringify(result);document.body.prepend(report);
@@ -510,6 +511,7 @@ http.createServer((req,res)=>{
  html=html.replace(/<script src="https:[^"]+"><\/script>/g,'');
  html=html.replace('href="../static/style.css"',`href="/static/style.css?index=${index}"`);
  html=html.replace('<head>','<head><script>('+setup.toString()+')('+attack+');</script>');
+ html=html.replace('</body>','<script>window.wave1Checks='+require('./test_wave1_browser.cjs').toString()+';</script></body>');
  html=html.replace('</body>','<script>window.analyticsChecks='+require('./test_analytics_ui.cjs').toString()+';</script></body>');
  html=html.replace('</body>','<script>('+(url.searchParams.get('access')==='1'?runAccessTests:url.searchParams.get('list')==='1'?runListTests:url.searchParams.get('type-review')==='1'?runTypeReviewTests:url.searchParams.get('insights')==='1'?runInsightTests:url.searchParams.get('analytics')==='1'?runAnalyticsTests:url.searchParams.get('export')==='1'?runExportTests:runTests).toString()+')('+index+','+attack+');</script></body>');
  res.setHeader('Content-Type','text/html');res.end(html);

@@ -626,5 +626,52 @@ class DashboardAuthTests(unittest.TestCase):
 
 
 
+
+class ConnectionCleanupTests(unittest.TestCase):
+    """Inject failures without connecting; also included by the PostgreSQL runner."""
+    def test_summary_releases_resources_on_failures(self):
+        for stage in ('cursor', 'execute', 'fetchone', 'close'):
+            with self.subTest(stage=stage):
+                connection = MagicMock()
+                cursor = connection.cursor.return_value
+                cursor.fetchone.return_value = (100, 10)
+                target = connection.cursor if stage == 'cursor' else getattr(cursor, stage)
+                target.side_effect = RuntimeError('injected ' + stage)
+                with api.app.test_request_context('/api/summary'), patch.object(api, 'get_connection', return_value=connection):
+                    api.g.user_id = 101
+                    with self.assertRaises(RuntimeError):
+                        api.summary()
+                connection.close.assert_called_once()
+                if stage != 'cursor':
+                    cursor.close.assert_called_once()
+                connection.commit.assert_not_called()
+
+    def test_confirmation_releases_connection_when_cursor_creation_fails(self):
+        connection = MagicMock()
+        connection.cursor.side_effect = RuntimeError('injected cursor failure')
+        with api.app.test_request_context('/api/transactions/1/type-review/confirm',
+                method='POST', json={'fingerprint': 'test'}), patch.object(api, 'get_connection', return_value=connection):
+            api.g.user_id = 101
+            try:
+                api.confirm_type_review(1)
+            except RuntimeError:
+                pass
+        connection.close.assert_called_once()
+        connection.commit.assert_not_called()
+
+    def test_confirmation_releases_connection_even_when_cursor_close_fails(self):
+        connection = MagicMock()
+        cursor = connection.cursor.return_value
+        cursor.fetchone.return_value = None
+        cursor.close.side_effect = RuntimeError('injected close failure')
+        with api.app.test_request_context('/api/transactions/1/type-review/confirm',
+                method='POST', json={'fingerprint': 'test'}), patch.object(api, 'get_connection', return_value=connection):
+            api.g.user_id = 101
+            with self.assertRaises(RuntimeError):
+                api.confirm_type_review(1)
+        connection.close.assert_called_once()
+        connection.commit.assert_not_called()
+
+
 if __name__ == '__main__':
     unittest.main()

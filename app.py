@@ -463,41 +463,46 @@ def summary():
         return jsonify(error='Periode harus YYYY-MM'), 400
     user_id = g.user_id
     conn = get_connection()
-    cursor = conn.cursor()
+    cursor = None
+    try:
+        cursor = conn.cursor()
 
-    cursor.execute(
-        f"""
-        SELECT
-            COALESCE(
-                SUM(
-                    CASE
-                        WHEN type = 'income' THEN amount
-                        ELSE 0
-                    END
-                ),
-                0
-            ) AS income,
+        cursor.execute(
+            f"""
+            SELECT
+                COALESCE(
+                    SUM(
+                        CASE
+                            WHEN type = 'income' THEN amount
+                            ELSE 0
+                        END
+                    ),
+                    0
+                ) AS income,
 
-            COALESCE(
-                SUM(
-                    CASE
-                        WHEN type = 'expense' THEN amount
-                        ELSE 0
-                    END
-                ),
-                0
-            ) AS expense
+                COALESCE(
+                    SUM(
+                        CASE
+                            WHEN type = 'expense' THEN amount
+                            ELSE 0
+                        END
+                    ),
+                    0
+                ) AS expense
 
-        FROM expenses
-        WHERE user_id = %s AND currency = 'IDR'{month_sql}
-        """,
-        (user_id, *month_params)
-    )
+            FROM expenses
+            WHERE user_id = %s AND currency = 'IDR'{month_sql}
+            """,
+            (user_id, *month_params)
+        )
 
-    row = cursor.fetchone()
-
-    cursor.close()
-    conn.close()
+        row = cursor.fetchone()
+    finally:
+        try:
+            if cursor is not None:
+                cursor.close()
+        finally:
+            conn.close()
 
     income = integer_amount(row[0])
     expense = integer_amount(row[1])
@@ -1198,8 +1203,9 @@ def confirm_type_review(transaction_id):
     if not isinstance(body, dict) or set(body) != {'fingerprint'} or not isinstance(body['fingerprint'], str):
         return jsonify(message='Konfirmasi tidak valid.'), 400
     conn = get_connection()
-    cursor = conn.cursor()
+    cursor = None
     try:
+        cursor = conn.cursor()
         cursor.execute("SELECT type, category, note FROM expenses WHERE user_id = %s AND transaction_id = %s AND currency = 'IDR'", (g.user_id, transaction_id))
         row = cursor.fetchone()
         if row is None:
@@ -1220,8 +1226,11 @@ def confirm_type_review(transaction_id):
         conn.rollback()
         return jsonify(message='Gagal mengonfirmasi transaksi.'), 500
     finally:
-        cursor.close()
-        conn.close()
+        try:
+            if cursor is not None:
+                cursor.close()
+        finally:
+            conn.close()
 
 
 @app.route("/health")

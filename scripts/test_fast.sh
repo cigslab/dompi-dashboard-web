@@ -14,6 +14,9 @@ env -u DOMPI_DASHBOARD_TEST_DSN "$PYTHON_BIN" -m unittest discover -s tests -p '
 echo '== Auth client =='
 "$NODE_BIN" tests/test_dashboard_auth_client.cjs
 
+echo '== Wave 1 reliability =='
+"$NODE_BIN" --test tests/test_wave1_reliability.cjs
+
 echo '== Whitespace check =='
 git diff --check
 echo 'FAST TESTS PASSED (browser/XSS is a separate required checkpoint gate)'

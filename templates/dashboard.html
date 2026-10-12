@@ -862,7 +862,9 @@ function formatRupiah(value) {
     }).format(Number(value));
 }
 
+let summaryRequest = 0;
 async function loadSummary() {
+    const current = ++summaryRequest;
     const requestedMonth = homeMonth.selected;
     try {
         const response = await apiFetch(homeMonth.url(API_URL));
@@ -872,7 +874,7 @@ async function loadSummary() {
         }
 
         const data = await response.json();
-        if (requestedMonth !== homeMonth.selected) return;
+        if (current !== summaryRequest || requestedMonth !== homeMonth.selected) return;
 
         document.getElementById("balance").textContent =
             formatRupiah(data.balance);
@@ -884,6 +886,7 @@ async function loadSummary() {
             formatRupiah(data.expense);
 
     } catch (error) {
+        if (current !== summaryRequest || requestedMonth !== homeMonth.selected) return;
         console.error("Dashboard error:", error);
 
         document.getElementById("balance").textContent = "Gagal memuat";
@@ -900,8 +903,10 @@ const CATEGORY_API_URL =
 
 let expenseDonutChartInstance = null;
 
+let categoriesRequest = 0;
 async function loadCategories() {
-    if (!await DashboardAccess.allow()) return;
+    const current = ++categoriesRequest;
+    if (!await DashboardAccess.allow() || current !== categoriesRequest) return;
     const categoryList =
         document.getElementById("categoryList");
 
@@ -923,7 +928,7 @@ async function loadCategories() {
         }
 
         const data = await response.json();
-        if (requestedMonth !== homeMonth.selected || !DashboardAccess.isPro()) return;
+        if (current !== categoriesRequest || requestedMonth !== homeMonth.selected || !DashboardAccess.isPro()) return;
 
         // Ambil hanya data yang memiliki total > 0
         const expenseData = data.filter(
@@ -1189,6 +1194,11 @@ async function loadCategories() {
             });
 
     } catch (error) {
+        if (current !== categoriesRequest || requestedMonth !== homeMonth.selected || !DashboardAccess.isPro()) return;
+        if (expenseDonutChartInstance) {
+            expenseDonutChartInstance.destroy();
+            expenseDonutChartInstance = null;
+        }
         console.error(
             "Category error:",
             error
@@ -1205,7 +1215,7 @@ async function loadCategories() {
         }
 
         if (donutTotal) {
-            donutTotal.textContent = "Rp0";
+            donutTotal.textContent = "Tidak tersedia";
         }
     }
 }
@@ -1220,14 +1230,16 @@ const TRANSACTIONS_API_URL =
 async function loadTransactions() {
     await Promise.all([loadRecentTransactions(), loadTransactionPage()]);
 }
+let recentTransactionsRequest = 0;
 async function loadRecentTransactions() {
+    const current = ++recentTransactionsRequest;
     const transactionList = document.getElementById('transactionList');
     const requestedMonth = homeMonth.selected;
     try {
         const response = await apiFetch(homeMonth.url(TRANSACTIONS_API_URL));
         if (!response.ok) throw new Error('Gagal mengambil transaksi');
         const homeData = await response.json();
-        if (requestedMonth !== homeMonth.selected) return;
+        if (current !== recentTransactionsRequest || requestedMonth !== homeMonth.selected) return;
         transactionList.replaceChildren();
         const recentTransactions = homeMonth.rows(homeData, requestedMonth).slice(0, 5);
         if (recentTransactions.length === 0) transactionList.innerHTML = '<p>Belum ada transaksi.</p>';
@@ -1281,7 +1293,8 @@ async function loadRecentTransactions() {
 
 
     } catch (_) {
-        if (requestedMonth === homeMonth.selected) transactionList.textContent = 'Gagal memuat transaksi.';
+        if (current !== recentTransactionsRequest || requestedMonth !== homeMonth.selected) return;
+        transactionList.textContent = 'Gagal memuat transaksi.';
     }
 }
 let transactionListRequest = 0;
@@ -1881,6 +1894,7 @@ calendarGrid.appendChild(dayButton);
     }
 }
 calendarPrev.addEventListener("click", function () {
+    calendarViewDate.setDate(1);
     calendarViewDate.setMonth(
         calendarViewDate.getMonth() - 1
     );
@@ -1889,6 +1903,7 @@ calendarPrev.addEventListener("click", function () {
 });
 
 calendarNext.addEventListener("click", function () {
+    calendarViewDate.setDate(1);
     calendarViewDate.setMonth(
         calendarViewDate.getMonth() + 1
     );
