@@ -20,6 +20,11 @@ echo '== Wave 1 reliability =='
 echo '== Wave 2 editor integrity =='
 "$NODE_BIN" --test tests/test_wave2_editor.cjs
 
+echo '== Standalone frontend regression =='
+for suite in account_ui analytics_insights category_drilldown dashboard_access export_ui home_month theme type_review_ui upgrade_ui cashflow_target; do
+    "$NODE_BIN" "tests/test_${suite}.cjs"
+done
+
 echo '== Whitespace check =='
 git diff --check
 echo 'FAST TESTS PASSED (browser/XSS is a separate required checkpoint gate)'

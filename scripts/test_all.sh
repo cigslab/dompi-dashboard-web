@@ -8,5 +8,7 @@ PYTHON_BIN="${PYTHON_BIN:-python3}"
 ./scripts/test_fast.sh
 
 echo '== Disposable PostgreSQL regression =='
-"$PYTHON_BIN" tests/run_dashboard_postgres.py
+for runner in dashboard checkout type_review; do
+    "$PYTHON_BIN" "tests/run_${runner}_postgres.py"
+done
 echo 'NON-INTERACTIVE TESTS PASSED; run ./scripts/test_browser_manual.sh before checkpoint'

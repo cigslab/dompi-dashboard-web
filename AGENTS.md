@@ -52,9 +52,10 @@ Development (non-interactive): `./scripts/test_fast.sh`
 Full automated regression (non-interactive): `./scripts/test_all.sh`
 Browser/security checkpoint gate: `./scripts/test_browser_manual.sh`
 
-`test_fast.sh` runs SQLite/backend regression, auth client, and
-`git diff --check`. `test_all.sh` runs those checks followed by the existing
-disposable PostgreSQL runner (Homebrew PostgreSQL 18 on macOS). Neither command
+`test_fast.sh` runs SQLite/backend regression, all standalone Node suites listed
+in README.md, and `git diff --check`. `test_all.sh` runs those checks followed by
+the dashboard, checkout, and type-review disposable PostgreSQL runners
+(Homebrew PostgreSQL 18 on macOS). Neither command
 starts a browser server or waits for manual viewport verification.
 
 A full checkpoint requires BOTH `test_all.sh` and `test_browser_manual.sh`
@@ -71,8 +72,9 @@ http://127.0.0.1:8765/0?normal=1 (normal) at widths 390, 430, 768, and 1440,
 reloading each URL at each viewport. It fails on any failed result or timeout,
 requires all eight passing results, and stops its fixture server on exit.
 Default timeout: 300 seconds; override with `BROWSER_TEST_TIMEOUT`.
-Port 8765 must be available. Telegram/API/Chart.js remain mocked; this is not
-a live Telegram integration test.
+Port 8765 must be available. Telegram/API remain mocked; this is not a live
+Telegram integration test. Chart.js is mocked by default; use CHART_JS_BUNDLE
+as documented in README.md to exercise the pinned real library.
 
 Headless launch could not be validated in the current sandbox (installed
 Chrome aborted at launch). Browser automation is therefore not a claimed

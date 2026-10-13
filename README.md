@@ -23,30 +23,38 @@ The app reads environment variables directly; it does not automatically load `.e
 
 ## Tests
 
+| Gate | Command | Coverage |
+| --- | --- | --- |
+| Fast | `./scripts/test_fast.sh` | All `test_*.py` backend tests; auth client, Wave 1/2, account, insights, drilldown, access, export, month, theme, type review, upgrade, and cashflow-target standalone Node suites; whitespace check. |
+| Full local | `./scripts/test_all.sh` | Fast gate, then all three disposable PostgreSQL runners; fails on any failure. Browser is separate. |
+| PostgreSQL | `python tests/run_dashboard_postgres.py`, `python tests/run_checkout_postgres.py`, `python tests/run_type_review_postgres.py` | Real API connections, checkout locks/rollback, and type-review migration/CAS races. Requires Homebrew PostgreSQL 18. |
+| Browser | `./scripts/test_browser_manual.sh` | Normal and XSS fixtures at 390, 430, 768, 1440 px; all eight must pass. |
+
+Override `PYTHON_BIN` and `NODE_BIN` if necessary. A complete checkpoint requires
+both full local and browser gates. A PostgreSQL startup failure is a blocked gate,
+not a pass. Runners create disposable clusters on private Unix sockets; never
+point tests at production or set `DOMPI_DASHBOARD_TEST_DSN` outside its runner.
+
+`test_analytics_ui.cjs`, `test_wave1_browser.cjs`, and `test_wave2_browser.cjs`
+are browser helpers loaded by `test_dashboard_xss.cjs`, not standalone Node tests.
+The browser harness checks overflow, cell overlap, touch targets, mutations,
+auth headers and XSS. Telegram/API responses remain mocked.
+
+Chart.js is pinned to 4.5.1, the exact bundle returned by the previous unversioned
+CDN URL when inspected for Wave 3; byte comparison confirmed no library upgrade.
+Earlier browser tests mocked Chart.js and did not establish a real-library version.
+To run the browser gate with the actual pinned bundle instead of its default mock:
+
 ```bash
-python -m unittest discover -s tests -p 'test_*.py' -v
-node tests/test_dashboard_auth_client.cjs
-node tests/test_dashboard_xss.cjs
+chart_bundle=$(mktemp)
+curl -fsSL https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.umd.min.js -o "$chart_bundle"
+CHART_JS_BUNDLE="$chart_bundle" ./scripts/test_browser_manual.sh
+rm -f "$chart_bundle"
 ```
 
-For browser tests, open `http://127.0.0.1:8765/0` (XSS) and
-`http://127.0.0.1:8765/0?normal=1` (normal fixtures). Each reports pass/fail.
-Test both URLs at 390, 430, 768, and 1440px widths. Assertions cover overflow,
-transaction cell overlap, mobile action sizes, search, edit/delete, auth headers,
-and XSS. Telegram, API responses, and Chart.js are mocked; real Telegram/Chart.js
-integration remains a separate smoke test.
-
-On macOS with Homebrew PostgreSQL 18 already installed:
-
-```bash
-python tests/run_dashboard_postgres.py
-```
-
-This creates synthetic tables in a new temporary `/tmp/dompi-dashboard-test-*`
-cluster on a private Unix socket, disables TCP, runs the API tests with real
-PostgreSQL connections, then stops the server in `finally`. It does not load
-production credentials or use `DATABASE_URL`. Leave `DOMPI_DASHBOARD_TEST_DSN`
-unset outside that runner. The test guard rejects non-test connection targets.
+The harness serves that bundle locally and checks its version and a rendered
+nonzero-size donut, in addition to the normal regression assertions. Open the
+printed URLs at the four required widths. No production requests are made.
 
 Do not change Railway source or remove the API from the bot repository until
 this standalone service has passed the separate production verification phase.

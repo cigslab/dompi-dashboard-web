@@ -7,6 +7,8 @@ const path = require('node:path');
 const assert = require('node:assert/strict');
 const roots=[path.resolve(__dirname,'..')];
 const results={};
+const chartBundle = process.env.CHART_JS_BUNDLE ? fs.readFileSync(process.env.CHART_JS_BUNDLE) : null;
+if (chartBundle) assert(chartBundle.toString().includes('Chart.js v4.5.1'), 'Use the pinned Chart.js bundle');
 function setup(attack) {
   window.__dompiXss=0;
   window.__testErrors=[];
@@ -95,7 +97,7 @@ async function runTests(index,attack){
   const eq=(actual,expected,name)=>{if(JSON.stringify(actual)!==JSON.stringify(expected))throw new Error(name+': '+JSON.stringify({actual,expected}));checks++;};
   const wait=()=>new Promise(r=>setTimeout(r,60));
   const text=(selector)=>Array.from(document.querySelectorAll(selector),e=>e.textContent.trim());
-  const refreshEndpoints=['/api/summary','/api/cashflow','/api/categories','/api/transactions','/api/analytics/monthly','/api/categories/breakdown','/api/categories/review'];
+  const refreshEndpoints=['/api/summary','/api/categories','/api/transactions','/api/analytics/monthly','/api/categories/breakdown','/api/categories/review'];
   const counts=()=>Object.fromEntries(refreshEndpoints.map(path=>[path,window.__testCalls.filter(c=>c.path===path&&c.method==='GET').length]));
   const assertRefresh=async(before,label)=>{
     for(let i=0;i<50&&refreshEndpoints.some(path=>counts()[path]<=before[path]);i++) await wait();
@@ -106,6 +108,12 @@ async function runTests(index,attack){
     for(let i=0;i<50&&document.querySelectorAll('#allTransactionList .all-transaction-item').length!==4;i++)await wait();
     await wait();
     eq(window.__testErrors,[],'page errors');
+    eq(window.__testCalls.filter(c=>c.path==='/api/cashflow').length,0,'no cashflow request without render target');
+    if (window.__realChart) {
+      eq(Chart.version,'4.5.1','pinned Chart.js version');
+      const chart=Chart.getChart(document.getElementById('expenseDonutChart'));
+      eq(!!chart && chart.width>0 && chart.height>0,true,'real donut rendered');
+    }
     eq(text('[data-display-name]'),Array(2).fill(attack?window.__testTexts[0]:'Nama A'),'database name rendered as text');
     eq(text('.menu .menu-item'),['Beranda','Transaksi','Analitik','Akun'],'four primary destinations');
     eq(document.querySelectorAll('#categoriesPage,#reportsPage,#categoriesMenu,#reportsMenu').length,0,'legacy pages and menus removed');
@@ -233,9 +241,10 @@ async function runTests(index,attack){
       send('.transaction-delete-button','click');await assertRefresh(beforeDelete,'delete');
       eq(window.__testCalls.some(c=>c.method==='DELETE'&&c.path==='/api/transactions/1'),true,'DELETE behavior');
     }
-    for (const endpoint of ['/api/summary','/api/cashflow','/api/categories','/api/transactions','/api/analytics/monthly','/api/categories/breakdown','/api/categories/review']) {
+    for (const endpoint of ['/api/summary','/api/categories','/api/transactions','/api/analytics/monthly','/api/categories/breakdown','/api/categories/review']) {
       eq(window.__testCalls.filter(c=>c.path===endpoint&&c.method==='GET').length>=3,true,'refresh after mutations '+endpoint);
     }
+    eq(window.__testCalls.filter(c=>c.path==='/api/cashflow').length,0,'mutations do not request dead cashflow');
     send('#transactionMenu','click');
     const search=document.querySelector('#transactionSearch');
     search.value=attack?'quotes':'Kopi';send('#transactionSearch','input');await wait();
@@ -497,6 +506,7 @@ async function runListTests(index,attack) {
 }
 http.createServer((req,res)=>{
  const url=new URL(req.url,'http://127.0.0.1');
+ if(url.pathname==='/test-chart.js' && chartBundle){res.setHeader('Content-Type','application/javascript');res.end(chartBundle);return;}
  if(url.pathname==='/results'){
   if(req.method==='POST'){let body='';req.on('data',b=>body+=b);req.on('end',()=>{const result=JSON.parse(body);results[`${result.index}-${result.attack}`]=result;console.log(JSON.stringify(result));res.end('ok');});return;}
   res.setHeader('Content-Type','application/json');res.end(JSON.stringify(results));return;
@@ -510,9 +520,11 @@ http.createServer((req,res)=>{
  const applicationSource=html+'\n'+['analytics.js','navigation.js','export.js','dashboard-access.js'].map(name=>fs.readFileSync(path.join(roots[index],'static',name),'utf8')).join('\n');
  for(const match of applicationSource.matchAll(/\.innerHTML\s*=\s*`([\s\S]*?)`/g))assert(!match[1].includes('${'));
  assert(!/\.innerHTML\s*=\s*\n?\s*\w+\.map/.test(applicationSource));
+ if(chartBundle) html=html.replace('https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.umd.min.js','/test-chart.js');
  html=html.replace(/<script src="https:[^"]+"><\/script>/g,'');
  html=html.replace('href="../static/style.css"',`href="/static/style.css?index=${index}"`);
  html=html.replace('<head>','<head><script>('+setup.toString()+')('+attack+');</script>');
+ if(chartBundle) html=html.replace('</body>','<script>window.__realChart=true;</script></body>');
  html=html.replace('</body>','<script>window.wave2Checks='+require('./test_wave2_browser.cjs').toString()+';</script></body>');
  html=html.replace('</body>','<script>window.wave1Checks='+require('./test_wave1_browser.cjs').toString()+';</script></body>');
  html=html.replace('</body>','<script>window.analyticsChecks='+require('./test_analytics_ui.cjs').toString()+';</script></body>');
