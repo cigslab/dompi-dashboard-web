@@ -17,6 +17,9 @@ echo '== Auth client =='
 echo '== Wave 1 reliability =='
 "$NODE_BIN" --test tests/test_wave1_reliability.cjs
 
+echo '== Wave 2 editor integrity =='
+"$NODE_BIN" --test tests/test_wave2_editor.cjs
+
 echo '== Whitespace check =='
 git diff --check
 echo 'FAST TESTS PASSED (browser/XSS is a separate required checkpoint gate)'

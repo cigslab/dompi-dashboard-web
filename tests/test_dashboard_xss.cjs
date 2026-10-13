@@ -223,10 +223,11 @@ async function runTests(index,attack){
       send('.transaction-edit-button','click');
       eq(document.querySelector('#editTransactionCategory').value,window.__testTexts[0],'edit category literal');
       eq(document.querySelector('#editTransactionNote').value,window.__testTexts[0],'edit note literal');
+      document.querySelector('#editTransactionCategory').value=window.__testTexts[0]+' edited';
       const beforeEdit=counts();
       send('#saveEditTransaction','click');await assertRefresh(beforeEdit,'edit');
       const update=window.__testCalls.find(c=>c.method==='PATCH');
-      eq(JSON.parse(update.body).category,window.__testTexts[0],'PATCH literal');
+      eq(JSON.parse(update.body).category,window.__testTexts[0]+' edited','PATCH literal');
       eq(update.path,'/api/transactions/1','PATCH path');
       const beforeDelete=counts();
       send('.transaction-delete-button','click');await assertRefresh(beforeDelete,'delete');
@@ -283,6 +284,7 @@ async function runTests(index,attack){
     eq(document.querySelector('#accountDeleteStatus').textContent.startsWith('Berhasil.'),true,'explicit success state');
     await wait();await wait();send('#accountDeleteClose','click');
     checks += await window.wave1Checks();
+    checks += await window.wave2Checks();
     const result={pass:true,index,attack,checks,width:innerWidth};
     await window.__reportFetch('/results',{method:'POST',body:JSON.stringify(result)});
     const report=document.createElement('pre');report.id='xssTestResults';report.style.whiteSpace='pre-wrap';report.style.overflowWrap='anywhere';report.textContent=JSON.stringify(result);document.body.prepend(report);
@@ -432,7 +434,7 @@ async function runAccessTests(index,attack) {
     const month=document.querySelector('#donutMonth');month.value=month.options[2].value;month.dispatchEvent(new Event('change'));
     await loadTransactions();await Promise.all([loadCategories(),loadCashflowChart(),window.loadAnalytics()]);
     document.querySelector('#transactionMenu').click();
-    document.querySelector('.transaction-edit-button').click();document.querySelector('#saveEditTransaction').click();
+    document.querySelector('.transaction-edit-button').click();document.querySelector('#editTransactionAmount').value='2000';document.querySelector('#saveEditTransaction').click();
     for(let i=0;i<50&&!document.querySelector('#editTransactionModal').classList.contains('hidden');i++)await wait();
     await wait();document.querySelector('.transaction-delete-button').click();await wait();await wait();
     check(window.__testCalls.some(c=>c.method==='PATCH')&&window.__testCalls.some(c=>c.method==='DELETE'),'mutations exercised');
@@ -481,7 +483,7 @@ async function runListTests(index,attack) {
     for(const action of ['edit','delete']) {
       const before=listCalls().length;
       document.querySelector('.transaction-'+action+'-button').click();
-      if(action==='edit') document.querySelector('#saveEditTransaction').click();
+      if(action==='edit') {document.querySelector('#editTransactionAmount').value='2000';document.querySelector('#saveEditTransaction').click();}
       for(let i=0;i<100&&(listCalls().length===before||document.querySelector('#transactionListStatus').textContent==='Memuat transaksi…');i++) await new Promise(r=>setTimeout(r,20));
       check(listCalls().length>before,action+' refresh executed');
       check(listCalls().at(-1).query===filterQuery,action+' preserves active filter and resets cursor');
@@ -511,6 +513,7 @@ http.createServer((req,res)=>{
  html=html.replace(/<script src="https:[^"]+"><\/script>/g,'');
  html=html.replace('href="../static/style.css"',`href="/static/style.css?index=${index}"`);
  html=html.replace('<head>','<head><script>('+setup.toString()+')('+attack+');</script>');
+ html=html.replace('</body>','<script>window.wave2Checks='+require('./test_wave2_browser.cjs').toString()+';</script></body>');
  html=html.replace('</body>','<script>window.wave1Checks='+require('./test_wave1_browser.cjs').toString()+';</script></body>');
  html=html.replace('</body>','<script>window.analyticsChecks='+require('./test_analytics_ui.cjs').toString()+';</script></body>');
  html=html.replace('</body>','<script>('+(url.searchParams.get('access')==='1'?runAccessTests:url.searchParams.get('list')==='1'?runListTests:url.searchParams.get('type-review')==='1'?runTypeReviewTests:url.searchParams.get('insights')==='1'?runInsightTests:url.searchParams.get('analytics')==='1'?runAnalyticsTests:url.searchParams.get('export')==='1'?runExportTests:runTests).toString()+')('+index+','+attack+');</script></body>');

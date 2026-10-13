@@ -1,3 +1,4 @@
+from safe_diagnostics import log_unexpected
 from type_review import fingerprint, needs_review, suspected_mismatch
 from export_ticket import ExportTickets, TTL_SECONDS
 from transaction_export import period_bounds, render_csv
@@ -23,6 +24,7 @@ from itsdangerous import URLSafeTimedSerializer, BadSignature
 import psycopg2
 from flask import Flask, jsonify, render_template, request, g, Response
 from flask_cors import CORS
+from werkzeug.exceptions import BadRequest, UnsupportedMediaType
 
 
 app = Flask(__name__)
@@ -161,7 +163,8 @@ def require_paid_dashboard_access(owner):
                 free_policy=Capabilities(False, False, False, False, 0))
             if not capability.advanced_analytics:
                 return jsonify(error='pro_required', message='Analitik tersedia untuk Pro.'), 403
-    except Exception:
+    except Exception as error:
+        log_unexpected('paid_access', error)
         return jsonify(error='access_check_unavailable'), 503
     finally:
         if cursor is not None:
@@ -226,7 +229,8 @@ def checkout_products():
         return jsonify(result)
     except CheckoutError as error:
         return checkout_error(error)
-    except Exception:
+    except Exception as error:
+        log_unexpected('checkout_products', error)
         return jsonify(error="checkout_unavailable"), 503
     finally:
         if cursor:
@@ -252,7 +256,8 @@ def checkout_order():
         order = reserve_order(conn, g.user_id, data['product_code'])
     except CheckoutError as error:
         return checkout_error(error)
-    except Exception:
+    except Exception as error:
+        log_unexpected('checkout_order', error)
         return jsonify(error="checkout_unavailable"), 503
     finally:
         if conn:
@@ -341,7 +346,8 @@ def export_response(owner, period, ticket_only=False):
         return Response(content, content_type='text/csv; charset=utf-8',
                         headers={'Content-Disposition': f'attachment; filename="{filename}"',
                                  'X-Content-Type-Options': 'nosniff'})
-    except Exception:
+    except Exception as error:
+        log_unexpected('export_transactions', error)
         # Do not log transaction text, amounts or credentials.
         return jsonify(error="Export gagal. Data tidak dapat diekspor dengan aman."), 500
     finally:
@@ -1089,6 +1095,12 @@ def update_transaction(transaction_id):
 
     try:
         data = request.get_json()
+    except UnsupportedMediaType:
+        return jsonify(success=False, message='Content-Type harus application/json.'), 415
+    except BadRequest:
+        return jsonify(success=False, message='Body JSON tidak valid.'), 400
+
+    try:
         if not isinstance(data, dict):
             return {"success": False, "message": "Data transaksi tidak valid."}, 400
 
@@ -1157,7 +1169,7 @@ def update_transaction(transaction_id):
         if conn:
             conn.rollback()
 
-        print("Update transaction error:", error)
+        log_unexpected('update_transaction', error)
 
         return {
             "success": False,
@@ -1202,9 +1214,9 @@ def confirm_type_review(transaction_id):
     body = request.get_json(silent=True)
     if not isinstance(body, dict) or set(body) != {'fingerprint'} or not isinstance(body['fingerprint'], str):
         return jsonify(message='Konfirmasi tidak valid.'), 400
-    conn = get_connection()
-    cursor = None
+    conn = cursor = None
     try:
+        conn = get_connection()
         cursor = conn.cursor()
         cursor.execute("SELECT type, category, note FROM expenses WHERE user_id = %s AND transaction_id = %s AND currency = 'IDR'", (g.user_id, transaction_id))
         row = cursor.fetchone()
@@ -1222,15 +1234,18 @@ def confirm_type_review(transaction_id):
             return jsonify(message='Transaksi berubah. Muat ulang sebelum konfirmasi.'), 409
         conn.commit()
         return jsonify(success=True)
-    except Exception:
-        conn.rollback()
+    except Exception as error:
+        log_unexpected('confirm_type_review', error)
+        if conn is not None:
+            conn.rollback()
         return jsonify(message='Gagal mengonfirmasi transaksi.'), 500
     finally:
         try:
             if cursor is not None:
                 cursor.close()
         finally:
-            conn.close()
+            if conn is not None:
+                conn.close()
 
 
 @app.route("/health")

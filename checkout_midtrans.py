@@ -1,5 +1,6 @@
 """Same Snap SDK/environment contract as the bot; no live calls at import."""
 import os
+from safe_diagnostics import log_unexpected
 from urllib.parse import urlsplit
 
 
@@ -42,6 +43,7 @@ def create_snap_transaction(payment_id, amount, customer_id):
         if not valid_redirect(url):
             return False, None
         return True, {'redirect_url': url}
-    except Exception:
+    except Exception as error:
+        log_unexpected('checkout_provider', error)
         # Provider exception strings can contain sensitive request/config data.
         return False, None

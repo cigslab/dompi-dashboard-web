@@ -26,6 +26,11 @@ class TypeReviewPostgresTests(unittest.TestCase):
         self.db.autocommit = True
         with self.db.cursor() as c:
             c.execute("""DROP TABLE IF EXISTS expenses;
+                DROP TABLE IF EXISTS users;
+                CREATE TABLE users(telegram_id BIGINT PRIMARY KEY, plan TEXT, pro_until TEXT);
+                INSERT INTO users(telegram_id,plan,pro_until)
+                VALUES(101,'pro','2099-01-01 00:00:00'),
+                      (202,'pro','2099-01-01 00:00:00');
                 CREATE TABLE expenses(id BIGSERIAL PRIMARY KEY, user_id BIGINT,
                     transaction_id INTEGER, category TEXT, note TEXT, type TEXT,
                     date TEXT, amount BIGINT, currency TEXT, analytics_category TEXT);
@@ -39,6 +44,11 @@ class TypeReviewPostgresTests(unittest.TestCase):
         self.patch.start();self.addCleanup(self.patch.stop)
         clock=patch.object(auth.api.time,'time',return_value=auth.NOW)
         clock.start();self.addCleanup(clock.stop)
+        # Exercise the real guard before migrations or concurrency assertions.
+        for owner in (101, 202):
+            with auth.api.app.test_request_context('/api/transactions/type-review'):
+                self.assertIsNone(auth.api.require_paid_dashboard_access(owner),
+                                  f'Paid-access fixture must authorize user {owner}')
 
     def migration(self):
         conn=self.connect()

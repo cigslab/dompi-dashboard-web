@@ -1341,6 +1341,7 @@ async function loadTransactionPage(append = false) {
         if (current === transactionListRequest) { transactionListBusy = false; more.disabled = false; }
     }
 }
+const transactionEditorItems = new WeakMap();
 function renderTransactionRows(data) {
     const allTransactionList = document.getElementById('allTransactionList');
             data.forEach(item => {
@@ -1434,6 +1435,7 @@ function renderTransactionRows(data) {
                 button.dataset.transactionId = String(item.transaction_id);
             });
 
+            transactionEditorItems.set(fullTransactionItem, {...item});
             allTransactionList.appendChild(fullTransactionItem);
         });
 
@@ -1520,83 +1522,29 @@ document.addEventListener("click", async (event) => {
     }
 });
 let editingTransactionId = null;
+let editingTransaction = null;
+let editorInitialValues = null;
 function openTransactionEditor(item) {
-    editingTransactionId = item.transaction_id;
-    document.getElementById('editTransactionCategory').value = item.description || '';
-    document.getElementById('editTransactionAmount').value = item.amount;
-    document.getElementById('editTransactionNote').value = item.note === '-' ? '' : (item.note || '');
-    document.getElementById('editTransactionType').value = item.type;
+    if (!item) return;
+    editingTransaction = {...item, category: Object.hasOwn(item, 'description') ? item.description : item.category};
+    editingTransactionId = editingTransaction.transaction_id;
+    editorInitialValues = {};
+    for (const [field, suffix] of [['category', 'Category'], ['amount', 'Amount'], ['note', 'Note'], ['type', 'Type']]) {
+        const input = document.getElementById('editTransaction' + suffix);
+        input.value = editingTransaction[field] ?? '';
+        // Text controls may normalize line breaks. Only actual user edits enter PATCH.
+        editorInitialValues[field] = input.value;
+    }
     document.getElementById('editTransactionModal').classList.remove('hidden');
 }
 
-
 document.addEventListener("click", (event) => {
-    const editButton =
-        event.target.closest(".transaction-edit-button");
-
-    if (!editButton) {
-        return;
-    }
-
-    const transactionId =
-        editButton.dataset.transactionId;
-
-    const transactionItem =
-        editButton.closest(".all-transaction-item");
-
-    if (!transactionItem) {
-        return;
-    }
-
-    editingTransactionId = transactionId;
-
-    const category =
-        transactionItem.querySelector(".transaction-category")
-            ?.textContent.trim() || "";
-
-    const note =
-        transactionItem.querySelector(".transaction-note")
-            ?.textContent.trim() || "";
-
-    const amountText =
-        transactionItem.querySelector(".transaction-amount")
-            ?.textContent || "";
-
-    const amount =
-        Number(
-            amountText
-                .replace(/[^\d]/g, "")
-        );
-
-    const typeElement =
-        transactionItem.querySelector(".transaction-type");
-
-    const transactionType =
-        typeElement?.classList.contains("income")
-            ? "income"
-            : "expense";
-
-    document.getElementById(
-        "editTransactionCategory"
-    ).value = category;
-
-    document.getElementById(
-        "editTransactionAmount"
-    ).value = amount;
-
-    document.getElementById(
-        "editTransactionNote"
-    ).value =
-        note === "-" ? "" : note;
-
-    document.getElementById(
-        "editTransactionType"
-    ).value = transactionType;
-
-    document.getElementById(
-        "editTransactionModal"
-    ).classList.remove("hidden");
+    const editButton = event.target.closest(".transaction-edit-button");
+    if (!editButton) return;
+    const row = editButton.closest(".all-transaction-item");
+    openTransactionEditor(transactionEditorItems.get(row));
 });
+
 document
     .getElementById("cancelEditTransaction")
     .addEventListener("click", () => {
@@ -1605,6 +1553,7 @@ document
             .classList.add("hidden");
 
         editingTransactionId = null;
+        editingTransaction = editorInitialValues = null;
     });
 document
     .getElementById("saveEditTransaction")
@@ -1613,27 +1562,19 @@ document
             return;
         }
 
-        const category =
-            document.getElementById(
-                "editTransactionCategory"
-            ).value.trim();
-
-        const amount =
-            Number(
-                document.getElementById(
-                    "editTransactionAmount"
-                ).value
-            );
-
-        const note =
-            document.getElementById(
-                "editTransactionNote"
-            ).value.trim();
-
-        const type =
-            document.getElementById(
-                "editTransactionType"
-            ).value;
+        const changes = {};
+        for (const [field, suffix] of [['category', 'Category'], ['amount', 'Amount'], ['note', 'Note'], ['type', 'Type']]) {
+            const value = document.getElementById('editTransaction' + suffix).value;
+            if (value !== editorInitialValues[field]) {
+                changes[field] = field === 'amount' ? Number(value) : value;
+            }
+        }
+        if (Object.keys(changes).length === 0) {
+            document.getElementById('editTransactionModal').classList.add('hidden');
+            editingTransactionId = null;
+            editingTransaction = editorInitialValues = null;
+            return;
+        }
 
         try {
             const response = await apiFetch(
@@ -1643,12 +1584,7 @@ document
                     headers: {
                         "Content-Type": "application/json"
                     },
-                    body: JSON.stringify({
-                        category: category,
-                        amount: amount,
-                        note: note,
-                        type: type
-                    })
+                    body: JSON.stringify(changes)
                 }
             );
 
@@ -1667,6 +1603,7 @@ document
                 .classList.add("hidden");
 
             editingTransactionId = null;
+            editingTransaction = editorInitialValues = null;
 
             await loadSummary();
             await loadCategories();
