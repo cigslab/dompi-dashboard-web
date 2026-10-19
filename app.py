@@ -1,3 +1,4 @@
+from public_seo import register_public_seo
 from safe_diagnostics import log_unexpected
 from type_review import fingerprint, needs_review, suspected_mismatch
 from export_ticket import ExportTickets, TTL_SECONDS
@@ -28,6 +29,7 @@ from werkzeug.exceptions import BadRequest, UnsupportedMediaType
 
 
 app = Flask(__name__)
+register_public_seo(app)
 # Server-only settings: never pass BOT_TOKEN to templates or API responses.
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "").strip()
 if not BOT_TOKEN:

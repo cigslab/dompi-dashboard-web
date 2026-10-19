@@ -58,3 +58,37 @@ printed URLs at the four required widths. No production requests are made.
 
 Do not change Railway source or remove the API from the bot repository until
 this standalone service has passed the separate production verification phase.
+
+## Public SEO
+
+Set `PUBLIC_BASE_URL` to the canonical HTTPS origin of **this Flask service**
+(`PUBLIC_BASE_URL=https://dompiapp.id`, without a path, credentials, query or fragment).
+This is server configuration, never inferred from Host or proxy headers. A trailing
+slash is accepted. Do not use a separate marketing site's origin.
+
+`/sitemap.xml` serves UTF-8 XML with the sitemap 0.9 namespace. Its explicit
+allowlist is `/help`, `/privacy`, `/terms`: static public content, without login or
+DB access. Those pages have matching HTML canonicals, including when requested
+with query parameters. `/robots.txt` references the absolute sitemap URL and
+blocks crawling `/api/` and `/downloads/`, while allowing public content/assets.
+No invented lastmod, priority, or changefreq values are emitted.
+
+When the origin is missing/invalid, discovery endpoints return 503 and public
+pages omit canonical links. Existing app routes continue working. Configure and
+verify this setting before deploying; a robots 503 can temporarily stop crawling.
+
+The dashboard `/`, account checkout `/upgrade`, API, exports, health, static files,
+unknown routes and URL parameters are excluded from the sitemap. Exclusion and
+robots disallow are **not noindex**. An exact-path response hook adds `X-Robots-Tag: noindex` only on `/` and
+`/upgrade`, including HEAD, query-string variants, OPTIONS, method errors and
+handled error responses. It works independently of `PUBLIC_BASE_URL`. robots.txt
+allows crawling both paths so crawlers can read noindex. No global noindex is
+introduced; content, routing, auth, database and API behavior remain unchanged.
+
+When adding a public page, review its anonymous 200 response, content, canonical
+and absence of noindex before adding its endpoint to `PUBLIC_ENDPOINTS` in
+`public_seo.py`. The integration tests enforce these properties for every listed
+URL. Verify production proxy headers/robots overrides separately after an
+approved deployment; local tests cannot establish actual Google index status.
+
+Targeted tests: `python -m unittest discover -s tests -p 'test_public*.py' -v`.

@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     {% block theme_head %}<meta name="color-scheme" content="dark">{% endblock %}
     <title>{% block title %}{% endblock %} — Dompi</title>
+    {% if public_canonical_url %}<link rel="canonical" href="{{ public_canonical_url }}">{% endif %}
     <link rel="stylesheet" href="{{ url_for('static', filename='legal.css') }}">
     {% block extra_style %}{% endblock %}
 </head>
