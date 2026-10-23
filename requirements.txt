@@ -5,3 +5,6 @@ waitress==3.0.2
 
 midtransclient==1.4.2
 cryptography==50.0.1
+
+# Immutable shared entitlement artifact; verify with scripts/verify_dompi_core.py.
+./vendor/dompi_core-0.1.0-py3-none-any.whl

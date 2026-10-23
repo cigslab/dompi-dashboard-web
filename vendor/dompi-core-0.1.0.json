@@ -1,0 +1,29 @@
+{
+  "baseline_commit": "3de191772ee50f36da6982088f31893f54cc84d7",
+  "build_script_sha256": "b72c7e1ac2a762060d26130cbcc06314d0443344bb572094e25cc45e6929ba31",
+  "distribution": "dompi-core",
+  "python": "3.14.7",
+  "reproducibility": "two-clean-builds-byte-identical",
+  "schema_version": 1,
+  "sha256": "28847891bc168632d2253c40a5fb95135c7beb93a58955237db6c160ebd791f5",
+  "source_date_epoch": 1792509046,
+  "source_files_sha256": {
+    "build-requirements.txt": "ddb323d7fa11774858d43b35fbfc1bf24955bd3353726765a3c224c4f31ece31",
+    "pyproject.toml": "cd99973d40cb1764254e6879ea6328e8bfc5de0428894df070ea879424d4a02d",
+    "src/dompi_core/__init__.py": "b32c904b60b778dfe7614a3c58c856b740e14025303d625b31cd12c9c28fec06",
+    "src/dompi_core/entitlements.py": "91720bb403a17c66bf16207e80c6c1f42a43dec79cf7d3a507e52ad771ed0ed3"
+  },
+  "source_fingerprint_sha256": "4a81d8d67442e5dd63498de67171d144a0989f66041abfb2bcfaed6d502ee84f",
+  "source_head": "3de191772ee50f36da6982088f31893f54cc84d7",
+  "source_repository": "cigslab/dompi-bot",
+  "source_state": "working-tree-snapshot",
+  "tooling": {
+    "build": "1.3.0",
+    "packaging": "25.0",
+    "pyproject-hooks": "1.2.0",
+    "setuptools": "80.9.0",
+    "wheel": "0.45.1"
+  },
+  "version": "0.1.0",
+  "wheel": "dompi_core-0.1.0-py3-none-any.whl"
+}

@@ -61,3 +61,16 @@ class PaidDashboardTests(unittest.TestCase):
             self.db.execute('UPDATE users SET plan=?,pro_until=?,lifetime_plan=? WHERE telegram_id=101',(plan,expiry,lifetime));self.db.commit()
             for path in ('/api/analytics/monthly','/api/cashflow','/api/categories','/api/export/transactions'):
                 self.assertEqual(self.request('GET',path,signed()).status_code,200,path)
+
+    def test_core_preserves_ambiguous_lifetime_entry_but_denies_analytics(self):
+        self.db.execute('ALTER TABLE users ADD COLUMN lifetime_plan TEXT')
+        for lifetime in ('starter', 'pro'):
+            with self.subTest(lifetime=lifetime):
+                self.db.execute("UPDATE users SET plan='pro',pro_until='bad',lifetime_plan=? WHERE telegram_id=101", (lifetime,))
+                self.db.commit()
+                before = list(self.db.iterdump())
+                self.assertEqual(self.request('GET', '/api/summary', signed()).status_code, 200)
+                result = self.request('GET', '/api/analytics/monthly', signed())
+                self.assertEqual((result.status_code, result.json['error']),
+                                 (403, 'entitlement_review_required'))
+                self.assertEqual(list(self.db.iterdump()), before)

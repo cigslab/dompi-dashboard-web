@@ -4,6 +4,7 @@ from type_review import fingerprint, needs_review, suspected_mismatch
 from export_ticket import ExportTickets, TTL_SECONDS
 from transaction_export import period_bounds, render_csv
 from plan_contract import Capabilities, resolve_capabilities
+from dompi_core.entitlements import has_paid_access
 from checkout_policy import checkout_allowed
 import checkout_midtrans
 from lifetime_checkout import CheckoutError, offers, reserve_order
@@ -149,9 +150,7 @@ def require_paid_dashboard_access(owner):
         conn = get_connection()
         cursor = conn.cursor()
         entitlement = read_entitlement(cursor, owner, now=datetime.now(), dialect='postgresql')
-        paid = entitlement is not None and (
-            entitlement.lifetime in ('starter', 'pro') or
-            entitlement.effective == 'pro_legacy_active')
+        paid = has_paid_access(entitlement)
         if not paid:
             return jsonify(error='payment_required',
                            message='Aktifkan Dompi untuk mulai menggunakan fitur ini.'), 403
