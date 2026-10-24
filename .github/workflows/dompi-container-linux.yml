@@ -1,0 +1,159 @@
+name: Dompi full Linux container acceptance
+'on':
+  push:
+    branches:
+    - review/dompi-core-linux-build
+  workflow_dispatch: {}
+permissions:
+  contents: read
+jobs:
+  container-acceptance:
+    if: github.ref == 'refs/heads/review/dompi-core-linux-build'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    env:
+      APP_KIND: dashboard
+      CANDIDATE_SHA: b8d0b02fac415ef67d774cf18121340e5d1d4657
+      RAILPACK_VERSION: 0.41.0
+      RAILPACK_SHA256: ef88b70f6cf75cf5337333957d2fec6f6e0f6b581e4dd88c83a69f6fb826a154
+      EXPECTED_CORE_SHA256: 28847891bc168632d2253c40a5fb95135c7beb93a58955237db6c160ebd791f5
+    steps:
+    - name: Checkout exact application candidate
+      uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      with:
+        ref: b8d0b02fac415ef67d774cf18121340e5d1d4657
+        persist-credentials: false
+        fetch-depth: 1
+        path: candidate
+    - name: Verify candidate and create credential-free build context
+      run: |
+        set -euo pipefail
+        test "$(git -C candidate rev-parse HEAD)" = "$CANDIDATE_SHA"
+        mkdir -p "$RUNNER_TEMP/dompi-context" "$RUNNER_TEMP/dompi-tools" "$RUNNER_TEMP/dompi-docker"
+        git -C candidate archive "$CANDIDATE_SHA" | tar -x -C "$RUNNER_TEMP/dompi-context"
+        cd "$RUNNER_TEMP/dompi-context"
+        # Reject secret-bearing files without reading their content.
+        if find . -type f \( -name '.env' -o -name '.env.*' -o -name '*.pem' -o -name '*.key' \) | grep -q .; then
+          echo 'Unexpected sensitive-file name in candidate; refusing build.' >&2
+          exit 1
+        fi
+        printf '%s  %s\n' "$EXPECTED_CORE_SHA256" vendor/dompi_core-0.1.0-py3-none-any.whl | sha256sum --check --strict
+        python3 scripts/verify_dompi_core.py
+    - name: Download and verify exact Railpack binary
+      run: |
+        set -euo pipefail
+        archive="railpack-v${RAILPACK_VERSION}-x86_64-unknown-linux-musl.tar.gz"
+        curl --fail --location --retry 3 --output "$RUNNER_TEMP/$archive" "https://github.com/railwayapp/railpack/releases/download/v${RAILPACK_VERSION}/$archive"
+        printf '%s  %s\n' "$RAILPACK_SHA256" "$RUNNER_TEMP/$archive" | sha256sum --check --strict
+        tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP/dompi-tools" railpack
+        "$RUNNER_TEMP/dompi-tools/railpack" --version
+    - name: Prepare and check Linux installation plan
+      run: |
+        set -euo pipefail
+        env -i PATH="$PATH" HOME="$HOME" "$RUNNER_TEMP/dompi-tools/railpack" prepare "$RUNNER_TEMP/dompi-context" \
+          --env RAILPACK_PYTHON_VERSION=3.13.16 --plan-out "$RUNNER_TEMP/dompi-plan.json" --hide-pretty-plan
+        python3 - <<'CHECK'
+        import json, os
+        from pathlib import Path
+        plan = json.loads((Path(os.environ['RUNNER_TEMP']) / 'dompi-plan.json').read_text())
+        install = next(s for s in plan['steps'] if s['name'] == 'install')
+        assert {'local': True, 'include': ['vendor/dompi_core-0.1.0-py3-none-any.whl']} in install['inputs']
+        assert any(c.get('cmd') == 'pip install -r requirements.txt' for c in install['commands'])
+        expected = 'python start.py' if os.environ['APP_KIND'] == 'bot' else 'python app.py'
+        assert plan['deploy']['startCommand'] == expected
+        print('Install input and unchanged start command: PASS')
+        CHECK
+    - name: Start disposable BuildKit
+      run: |
+        set -euo pipefail
+        docker run --detach --rm --privileged --name dompi-buildkit moby/buildkit:v0.34.1
+        ready=false
+        for attempt in $(seq 1 30); do
+          if docker exec dompi-buildkit buildctl debug workers >/dev/null 2>&1; then ready=true; break; fi
+          sleep 2
+        done
+        test "$ready" = true
+    - name: Build full application image locally
+      run: |
+        set -euo pipefail
+        # No runner token or application secrets are forwarded to Railpack/BuildKit.
+        env -i PATH="$PATH" HOME="$HOME" DOCKER_CONFIG="$RUNNER_TEMP/dompi-docker" \
+          BUILDKIT_HOST=docker-container://dompi-buildkit \
+          "$RUNNER_TEMP/dompi-tools/railpack" build "$RUNNER_TEMP/dompi-context" \
+          --env RAILPACK_PYTHON_VERSION=3.13.16 --platform linux/amd64 \
+          --name "dompi-ci:$APP_KIND" --no-cache --progress plain
+        printf 'Full container build: PASS (%s, %s)\n' "$APP_KIND" "$CANDIDATE_SHA" >> "$GITHUB_STEP_SUMMARY"
+    - name: Verify installed Core inside image without network
+      run: |
+        set -euo pipefail
+        docker run --rm -i --network none --read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges \
+          --entrypoint /app/.venv/bin/python "dompi-ci:$APP_KIND" -I -B - <<'SMOKE'
+        import hashlib, importlib.metadata, platform
+        from pathlib import Path
+        from datetime import datetime
+        import dompi_core
+        from dompi_core import resolve_entitlement, has_paid_access
+        assert platform.system() == 'Linux' and platform.python_version() == '3.13.16'
+        assert importlib.metadata.version('dompi-core') == dompi_core.__version__ == '0.1.0'
+        assert 'site-packages' in str(Path(dompi_core.__file__))
+        assert hashlib.sha256(Path('/app/vendor/dompi_core-0.1.0-py3-none-any.whl').read_bytes()).hexdigest() == '28847891bc168632d2253c40a5fb95135c7beb93a58955237db6c160ebd791f5'
+        now = datetime(2026, 1, 1)
+        for lifetime in ('starter', 'pro'):
+            entitlement = resolve_entitlement(lifetime=lifetime, now=now)
+            assert entitlement.effective == lifetime + '_lifetime' and has_paid_access(entitlement)
+        assert has_paid_access(resolve_entitlement(legacy_plan='pro', pro_until='2099-01-01', now=now))
+        assert not has_paid_access(resolve_entitlement(now=now))
+        assert not has_paid_access(None)
+        print('Installed Core, Python, wheel checksum, resolver and predicate: PASS')
+        SMOKE
+    - name: Offline runtime health smoke (scope limited)
+      run: |
+        set -euo pipefail
+        # Dummy values only. No real Telegram credential; no provider or database URL.
+        docker run --rm -i --network none --read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges \
+          --env APP_KIND="$APP_KIND" --env BOT_TOKEN=synthetic-ci-not-a-real-token --env ADMIN_ID=1 \
+          --env PYTHON_DOTENV_DISABLED=1 --env DB_PATH=/tmp/dompi-ci.sqlite --env PORT=8765 \
+          --entrypoint /app/.venv/bin/python "dompi-ci:$APP_KIND" -B - <<'HEALTH'
+        import json, os, subprocess, sys, time, urllib.request
+        kind = os.environ['APP_KIND']
+        if kind == 'dashboard':
+            command = [sys.executable, '-B', 'app.py']
+        else:
+            # HTTP component only: start.py also polls Telegram and cannot run fully offline.
+            command = [sys.executable, '-B', '-c', "from webhook import app; from waitress import serve; serve(app, host='127.0.0.1', port=8765)"]
+        process = subprocess.Popen(command, cwd='/app')
+        try:
+            for _ in range(60):
+                if process.poll() is not None:
+                    raise RuntimeError('Application exited before healthcheck')
+                try:
+                    with urllib.request.urlopen('http://127.0.0.1:8765/health', timeout=1) as response:
+                        assert response.status == 200 and json.load(response)['ok'] is True
+                    print(kind, 'offline health: PASS')
+                    break
+                except (OSError, urllib.error.URLError):
+                    time.sleep(0.5)
+            else:
+                raise RuntimeError('Healthcheck timed out')
+        finally:
+            process.terminate()
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait()
+        HEALTH
+    - name: Record acceptance scope
+      run: |
+        {
+          printf 'Candidate: `%s`; Railpack `%s`; Python `3.13.16`.\n\n' "$CANDIDATE_SHA" "$RAILPACK_VERSION"
+          printf 'Container build + installed Core smoke + offline health: PASS.\n\n'
+          printf 'Bot health covers HTTP component only; Telegram polling is NOT tested. Dashboard health does NOT validate database-backed routes. No payment/provider integration is exercised.\n'
+        } >> "$GITHUB_STEP_SUMMARY"
+    - name: Remove disposable build daemon
+      if: always()
+      run: |
+        docker rm -f dompi-buildkit >/dev/null 2>&1 || true
