@@ -16,7 +16,7 @@ jobs:
         shell: bash
     env:
       APP_KIND: dashboard
-      CANDIDATE_SHA: b8d0b02fac415ef67d774cf18121340e5d1d4657
+      CANDIDATE_SHA: ${{ github.sha }}
       RAILPACK_VERSION: 0.41.0
       RAILPACK_SHA256: ef88b70f6cf75cf5337333957d2fec6f6e0f6b581e4dd88c83a69f6fb826a154
       EXPECTED_CORE_SHA256: 28847891bc168632d2253c40a5fb95135c7beb93a58955237db6c160ebd791f5
@@ -24,7 +24,7 @@ jobs:
     - name: Checkout exact application candidate
       uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       with:
-        ref: b8d0b02fac415ef67d774cf18121340e5d1d4657
+        ref: ${{ github.sha }}
         persist-credentials: false
         fetch-depth: 1
         path: candidate
@@ -60,7 +60,7 @@ jobs:
         from pathlib import Path
         plan = json.loads((Path(os.environ['RUNNER_TEMP']) / 'dompi-plan.json').read_text())
         install = next(s for s in plan['steps'] if s['name'] == 'install')
-        assert {'local': True, 'include': ['vendor/dompi_core-0.1.0-py3-none-any.whl']} in install['inputs']
+        assert {'local': True, 'include': ['vendor']} in install['inputs']
         assert any(c.get('cmd') == 'pip install -r requirements.txt' for c in install['commands'])
         expected = 'python start.py' if os.environ['APP_KIND'] == 'bot' else 'python app.py'
         assert plan['deploy']['startCommand'] == expected
