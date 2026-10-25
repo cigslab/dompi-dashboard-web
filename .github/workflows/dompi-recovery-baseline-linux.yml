@@ -1,0 +1,154 @@
+name: Dashboard recovery baseline Linux acceptance
+'on':
+  push:
+    branches:
+    - review/dompi-dashboard-recovery
+  workflow_dispatch: {}
+permissions:
+  contents: read
+jobs:
+  baseline-recovery:
+    if: github.ref == 'refs/heads/review/dompi-dashboard-recovery'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    env:
+      BASELINE_SHA: af0bd34854707caa1ba872ad3c2004104af9410b
+      RAILPACK_VERSION: 0.41.0
+      RAILPACK_SHA256: ef88b70f6cf75cf5337333957d2fec6f6e0f6b581e4dd88c83a69f6fb826a154
+    steps:
+    - name: Checkout immutable dashboard baseline
+      uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      with:
+        ref: af0bd34854707caa1ba872ad3c2004104af9410b
+        persist-credentials: false
+        fetch-depth: 1
+        path: baseline
+    - name: Verify baseline archive and original build context
+      run: |
+        set -euo pipefail
+        test "$(git -C baseline rev-parse HEAD)" = "$BASELINE_SHA"
+        mkdir -p "$RUNNER_TEMP/dompi-context" "$RUNNER_TEMP/dompi-tools" "$RUNNER_TEMP/dompi-docker"
+        git -C baseline archive --format=tar "$BASELINE_SHA" > "$RUNNER_TEMP/baseline.tar"
+        test "$(git get-tar-commit-id < "$RUNNER_TEMP/baseline.tar")" = "$BASELINE_SHA"
+        tar -xf "$RUNNER_TEMP/baseline.tar" -C "$RUNNER_TEMP/dompi-context"
+        cd "$RUNNER_TEMP/dompi-context"
+        test ! -e railpack.json
+        test ! -e vendor
+        if find . -type f \( -name '.env' -o -name '.env.*' -o -name '*.pem' -o -name '*.key' \) | grep -q .; then
+          echo 'Unexpected sensitive-file name in baseline; refusing build.' >&2
+          exit 1
+        fi
+        python3 - <<'VERIFY'
+        import hashlib, os, subprocess
+        from pathlib import Path
+        root = Path.cwd()
+        checkout = Path(os.environ['GITHUB_WORKSPACE']) / 'baseline'
+        sha = os.environ['BASELINE_SHA']
+        names = subprocess.check_output(['git', '-C', str(checkout), 'ls-tree', '-r', '--name-only', sha], text=True).splitlines()
+        assert set(names) == {str(p.relative_to(root)) for p in root.rglob('*') if p.is_file()}
+        for name in names:
+            assert not (root / name).is_symlink()
+            expected = subprocess.check_output(['git', '-C', str(checkout), 'show', sha + ':' + name])
+            assert (root / name).read_bytes() == expected, name
+        with open(os.environ['GITHUB_ENV'], 'a') as output:
+            for name, key in [('app.py', 'BASELINE_APP_SHA256'), ('requirements.txt', 'BASELINE_REQUIREMENTS_SHA256')]:
+                output.write(key + '=' + hashlib.sha256((root / name).read_bytes()).hexdigest() + '\n')
+        print('Exact baseline archive verified:', sha, len(names), 'files')
+        VERIFY
+    - name: Download and verify exact Railpack binary
+      run: |
+        set -euo pipefail
+        archive="railpack-v${RAILPACK_VERSION}-x86_64-unknown-linux-musl.tar.gz"
+        curl --fail --location --retry 3 --output "$RUNNER_TEMP/$archive" "https://github.com/railwayapp/railpack/releases/download/v${RAILPACK_VERSION}/$archive"
+        printf '%s  %s\n' "$RAILPACK_SHA256" "$RUNNER_TEMP/$archive" | sha256sum --check --strict
+        tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP/dompi-tools" railpack
+        "$RUNNER_TEMP/dompi-tools/railpack" --version
+    - name: Prepare and check Linux installation plan
+      run: |
+        set -euo pipefail
+        env -i PATH="$PATH" HOME="$HOME" "$RUNNER_TEMP/dompi-tools/railpack" prepare "$RUNNER_TEMP/dompi-context" \
+          --env RAILPACK_PYTHON_VERSION=3.13.16 --plan-out "$RUNNER_TEMP/dompi-plan.json" --hide-pretty-plan
+        python3 - <<'CHECK'
+        import json, os
+        from pathlib import Path
+        plan = json.loads((Path(os.environ['RUNNER_TEMP']) / 'dompi-plan.json').read_text())
+        install = next(s for s in plan['steps'] if s['name'] == 'install')
+        assert any(c.get('cmd') == 'pip install -r requirements.txt' for c in install['commands'])
+        assert plan['deploy']['startCommand'] == 'python app.py'
+        print('Baseline pip install and python app.py start command: PASS')
+        CHECK
+    - name: Start disposable BuildKit
+      run: |
+        set -euo pipefail
+        docker run --detach --rm --privileged --name dompi-buildkit moby/buildkit:v0.34.1
+        ready=false
+        for attempt in $(seq 1 30); do
+          if docker exec dompi-buildkit buildctl debug workers >/dev/null 2>&1; then ready=true; break; fi
+          sleep 2
+        done
+        test "$ready" = true
+    - name: Build full application image locally
+      run: |
+        set -euo pipefail
+        # No runner token or application secrets are forwarded to Railpack/BuildKit.
+        env -i PATH="$PATH" HOME="$HOME" DOCKER_CONFIG="$RUNNER_TEMP/dompi-docker" \
+          BUILDKIT_HOST=docker-container://dompi-buildkit \
+          "$RUNNER_TEMP/dompi-tools/railpack" build "$RUNNER_TEMP/dompi-context" \
+          --env RAILPACK_PYTHON_VERSION=3.13.16 --platform linux/amd64 \
+          --name "dompi-recovery:baseline" --no-cache --progress plain
+        printf 'Full container build: PASS (%s, %s)\n' "dashboard-baseline" "$BASELINE_SHA" >> "$GITHUB_STEP_SUMMARY"
+    - name: Offline runtime health smoke (scope limited)
+      run: |
+        set -euo pipefail
+        # Dummy values only. No real Telegram credential; no provider or database URL.
+        docker run --rm -i --network none --read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges \
+          --env BOT_TOKEN=synthetic-ci-not-a-real-token \
+          --env PYTHON_DOTENV_DISABLED=1 --env PORT=8765 \
+          --env BASELINE_APP_SHA256="$BASELINE_APP_SHA256" --env BASELINE_REQUIREMENTS_SHA256="$BASELINE_REQUIREMENTS_SHA256" \
+          --entrypoint /app/.venv/bin/python "dompi-recovery:baseline" -B - <<'HEALTH'
+        import json, os, subprocess, sys, time, urllib.request
+        import hashlib, platform, importlib.util
+        from pathlib import Path
+        assert platform.system() == 'Linux' and platform.python_version() == '3.13.16'
+        assert not os.environ.get('DATABASE_URL')
+        assert not os.environ.get('MIDTRANS_SERVER_KEY')
+        assert importlib.util.find_spec('dompi_core') is None
+        for name, key in [('app.py', 'BASELINE_APP_SHA256'), ('requirements.txt', 'BASELINE_REQUIREMENTS_SHA256')]:
+            assert hashlib.sha256((Path('/app') / name).read_bytes()).hexdigest() == os.environ[key]
+        command = [sys.executable, '-B', 'app.py']
+        process = subprocess.Popen(command, cwd='/app')
+        try:
+            for _ in range(60):
+                if process.poll() is not None:
+                    raise RuntimeError('Application exited before healthcheck')
+                try:
+                    with urllib.request.urlopen('http://127.0.0.1:8765/health', timeout=1) as response:
+                        assert response.status == 200 and json.load(response)['ok'] is True
+                    print('Baseline python app.py startup and HTTP 200 /health: PASS')
+                    break
+                except (OSError, urllib.error.URLError):
+                    time.sleep(0.5)
+            else:
+                raise RuntimeError('Healthcheck timed out')
+        finally:
+            process.terminate()
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait()
+        HEALTH
+    - name: Record acceptance scope
+      run: |
+        {
+          printf 'Baseline: `%s`; Railpack `%s`; Python `3.13.16`.\n\n' "$BASELINE_SHA" "$RAILPACK_VERSION"
+          printf 'Original baseline archive + full container build + offline startup/health: PASS.\n'
+          printf 'No Core wheel or candidate config added. No production credentials, database, provider calls, deployment or image publishing. Database-backed routes and production recovery are NOT exercised.\n'
+        } >> "$GITHUB_STEP_SUMMARY"
+    - name: Remove disposable build daemon
+      if: always()
+      run: |
+        docker rm -f dompi-buildkit >/dev/null 2>&1 || true
