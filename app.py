@@ -202,6 +202,10 @@ def get_connection():
     return psycopg2.connect(DATABASE_URL)
 
 
+from core_dashboard import register as register_core_dashboard
+register_core_dashboard(app, lambda: get_connection())
+
+
 @app.route("/")
 def home():
     return render_template("dashboard.html")

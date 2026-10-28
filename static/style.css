@@ -1464,3 +1464,6 @@ input, select, textarea { accent-color: var(--positive); }
 
 .pro-access-state { padding: 16px 0; color: var(--muted); }
 [data-pro-content][hidden], [data-pro-state][hidden] { display: none !important; }
+/* Opt-in credit history contains opaque identifiers; keep narrow layouts safe. */
+#coreV2Panel { overflow-wrap: anywhere; }
+#coreV2Panel select { max-width: 100%; }

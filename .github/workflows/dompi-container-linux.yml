@@ -2,13 +2,13 @@ name: Dompi full Linux container acceptance
 'on':
   push:
     branches:
-    - review/dompi-core-linux-build
+    - review/dompi-core-v2-acceptance
   workflow_dispatch: {}
 permissions:
   contents: read
 jobs:
   container-acceptance:
-    if: github.ref == 'refs/heads/review/dompi-core-linux-build'
+    if: github.ref == 'refs/heads/review/dompi-core-v2-acceptance'
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     defaults:
@@ -19,7 +19,7 @@ jobs:
       CANDIDATE_SHA: ${{ github.sha }}
       RAILPACK_VERSION: 0.41.0
       RAILPACK_SHA256: ef88b70f6cf75cf5337333957d2fec6f6e0f6b581e4dd88c83a69f6fb826a154
-      EXPECTED_CORE_SHA256: 28847891bc168632d2253c40a5fb95135c7beb93a58955237db6c160ebd791f5
+      EXPECTED_CORE_SHA256: e5e2068b616d3fc182303f387211da8106e4c58f189e69a352b5b51002e53e15
     steps:
     - name: Checkout exact application candidate
       uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -40,7 +40,7 @@ jobs:
           echo 'Unexpected sensitive-file name in candidate; refusing build.' >&2
           exit 1
         fi
-        printf '%s  %s\n' "$EXPECTED_CORE_SHA256" vendor/dompi_core-0.1.0-py3-none-any.whl | sha256sum --check --strict
+        printf '%s  %s\n' "$EXPECTED_CORE_SHA256" vendor/dompi_core-0.2.0-py3-none-any.whl | sha256sum --check --strict
         python3 scripts/verify_dompi_core.py
     - name: Download and verify exact Railpack binary
       run: |
@@ -97,9 +97,9 @@ jobs:
         import dompi_core
         from dompi_core import resolve_entitlement, has_paid_access
         assert platform.system() == 'Linux' and platform.python_version() == '3.13.16'
-        assert importlib.metadata.version('dompi-core') == dompi_core.__version__ == '0.1.0'
+        assert importlib.metadata.version('dompi-core') == dompi_core.__version__ == '0.2.0'
         assert 'site-packages' in str(Path(dompi_core.__file__))
-        assert hashlib.sha256(Path('/app/vendor/dompi_core-0.1.0-py3-none-any.whl').read_bytes()).hexdigest() == '28847891bc168632d2253c40a5fb95135c7beb93a58955237db6c160ebd791f5'
+        assert hashlib.sha256(Path('/app/vendor/dompi_core-0.2.0-py3-none-any.whl').read_bytes()).hexdigest() == 'e5e2068b616d3fc182303f387211da8106e4c58f189e69a352b5b51002e53e15'
         now = datetime(2026, 1, 1)
         for lifetime in ('starter', 'pro'):
             entitlement = resolve_entitlement(lifetime=lifetime, now=now)
@@ -109,6 +109,33 @@ jobs:
         assert not has_paid_access(None)
         print('Installed Core, Python, wheel checksum, resolver and predicate: PASS')
         SMOKE
+    - name: Verify legacy exports and feature flags OFF in image
+      run: |
+        set -euo pipefail
+        docker run --rm --network none --read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges \
+          --entrypoint /app/.venv/bin/python "dompi-ci:$APP_KIND" -B -m unittest discover -s /app/tests -p test_core_compatibility.py -v
+        docker run --rm -i --network none --read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges \
+          --env APP_KIND="$APP_KIND" --entrypoint /app/.venv/bin/python "dompi-ci:$APP_KIND" -I -B - <<'FLAGS'
+        import ast, os
+        from pathlib import Path
+        if os.environ['APP_KIND'] == 'bot':
+            names = ('telegram_v2.py', 'whatsapp_v2.py', 'telegram_linking.py', 'lynk_topup.py')
+            expected = 7
+        else:
+            names = ('core_dashboard.py',)
+            expected = 2
+        flags = set()
+        for name in names:
+            tree = ast.parse((Path('/app') / name).read_text())
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == 'getenv':
+                    if node.args and isinstance(node.args[0], ast.Constant) and str(node.args[0].value).startswith('DOMPI_CORE_V2_'):
+                        assert len(node.args) == 2 and ast.literal_eval(node.args[1]) == ''
+                        flags.add(node.args[0].value)
+        assert len(flags) == expected, flags
+        assert all(os.getenv(flag, '') != '1' for flag in flags)
+        print('V2 flags default OFF:', sorted(flags))
+        FLAGS
     - name: Offline runtime health smoke (scope limited)
       run: |
         set -euo pipefail

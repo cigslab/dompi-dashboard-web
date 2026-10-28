@@ -294,6 +294,7 @@ async function runTests(index,attack){
     await wait();await wait();send('#accountDeleteClose','click');
     checks += await window.wave1Checks();
     checks += await window.wave2Checks();
+    checks += await window.coreV2Checks();
     const result={pass:true,index,attack,checks,width:innerWidth};
     await window.__reportFetch('/results',{method:'POST',body:JSON.stringify(result)});
     const report=document.createElement('pre');report.id='xssTestResults';report.style.whiteSpace='pre-wrap';report.style.overflowWrap='anywhere';report.textContent=JSON.stringify(result);document.body.prepend(report);
@@ -511,13 +512,15 @@ http.createServer((req,res)=>{
   if(req.method==='POST'){let body='';req.on('data',b=>body+=b);req.on('end',()=>{const result=JSON.parse(body);results[`${result.index}-${result.attack}`]=result;console.log(JSON.stringify(result));res.end('ok');});return;}
   res.setHeader('Content-Type','application/json');res.end(JSON.stringify(results));return;
  }
- if(['/static/analytics.js','/static/navigation.js','/static/export.js','/static/home-month.js','/static/theme.js','/static/dashboard-access.js'].includes(url.pathname)){res.setHeader('Content-Type','application/javascript');res.end(fs.readFileSync(path.join(roots[0],url.pathname.slice(1))));return;}
+ if(['/static/analytics.js','/static/navigation.js','/static/export.js','/static/home-month.js','/static/theme.js','/static/dashboard-access.js','/static/core-v2.js'].includes(url.pathname)){res.setHeader('Content-Type','application/javascript');res.end(fs.readFileSync(path.join(roots[0],url.pathname.slice(1))));return;}
  if(url.pathname.endsWith('style.css')){const i=Number(url.searchParams.get('index')||0);res.setHeader('Content-Type','text/css');res.end(fs.readFileSync(path.join(roots[i],'static/style.css')));return;}
  if(!/^\/0$/.test(url.pathname)){res.statusCode=404;res.end();return;}
  const index=Number(url.pathname.slice(1)),attack=url.searchParams.get('normal')!=='1';
  let html=fs.readFileSync(path.join(roots[index],'templates/dashboard.html'),'utf8');
+ // Explicitly render the new flag as ON in this synthetic browser fixture.
+ html=html.replace(/{% if core_v2_dashboard_enabled %}([\s\S]*?){% endif %}/g,'$1');
  // All application innerHTML assignments must contain constant markup only.
- const applicationSource=html+'\n'+['analytics.js','navigation.js','export.js','dashboard-access.js'].map(name=>fs.readFileSync(path.join(roots[index],'static',name),'utf8')).join('\n');
+ const applicationSource=html+'\n'+['analytics.js','navigation.js','export.js','dashboard-access.js','core-v2.js'].map(name=>fs.readFileSync(path.join(roots[index],'static',name),'utf8')).join('\n');
  for(const match of applicationSource.matchAll(/\.innerHTML\s*=\s*`([\s\S]*?)`/g))assert(!match[1].includes('${'));
  assert(!/\.innerHTML\s*=\s*\n?\s*\w+\.map/.test(applicationSource));
  if(chartBundle) html=html.replace('https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.umd.min.js','/test-chart.js');
@@ -526,6 +529,7 @@ http.createServer((req,res)=>{
  html=html.replace('<head>','<head><script>('+setup.toString()+')('+attack+');</script>');
  if(chartBundle) html=html.replace('</body>','<script>window.__realChart=true;</script></body>');
  html=html.replace('</body>','<script>window.wave2Checks='+require('./test_wave2_browser.cjs').toString()+';</script></body>');
+ html=html.replace('</body>','<script>window.coreV2Checks='+require('./test_core_v2_browser.cjs').toString()+';</script></body>');
  html=html.replace('</body>','<script>window.wave1Checks='+require('./test_wave1_browser.cjs').toString()+';</script></body>');
  html=html.replace('</body>','<script>window.analyticsChecks='+require('./test_analytics_ui.cjs').toString()+';</script></body>');
  html=html.replace('</body>','<script>('+(url.searchParams.get('access')==='1'?runAccessTests:url.searchParams.get('list')==='1'?runListTests:url.searchParams.get('type-review')==='1'?runTypeReviewTests:url.searchParams.get('insights')==='1'?runInsightTests:url.searchParams.get('analytics')==='1'?runAnalyticsTests:url.searchParams.get('export')==='1'?runExportTests:runTests).toString()+')('+index+','+attack+');</script></body>');

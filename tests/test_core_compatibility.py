@@ -31,7 +31,7 @@ class CoreCompatibility(unittest.TestCase):
             root = Path(temp)
             shutil.copytree(ROOT / 'vendor', root / 'vendor')
             shutil.copyfile(ROOT / 'requirements.txt', root / 'requirements.txt')
-            wheel = root / 'vendor/dompi_core-0.1.0-py3-none-any.whl'
+            wheel = root / 'vendor/dompi_core-0.2.0-py3-none-any.whl'
             wheel.write_bytes(wheel.read_bytes() + b'corrupt')
             with self.assertRaisesRegex(ValueError, 'SHA-256 mismatch'):
                 verifier.verify(root)

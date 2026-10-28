@@ -33,6 +33,24 @@
 
         <main class="main-content">
             <section id="accountPage" class="page-hidden">
+                {% if core_v2_dashboard_enabled %}
+                <section class="panel" id="coreV2Panel" aria-labelledby="coreV2Heading">
+                    <h2 id="coreV2Heading">Kredit &amp; kuota AI</h2>
+                    <button type="button" id="coreV2Refresh">Muat saldo dan histori</button>
+                    <p id="coreV2Status" role="status" aria-live="polite"></p>
+                    <p id="coreV2Balance"></p><ul id="coreV2Quota"></ul>
+                    <h3>Pemakaian AI</h3><ul id="coreV2Usage"></ul>
+                    <button type="button" id="coreV2MoreUsage" hidden>Histori lebih lama</button>
+                    <h3>Mutasi kredit</h3><ul id="coreV2Credits"></ul>
+                    <button type="button" id="coreV2MoreCredits" hidden>Mutasi lebih lama</button>
+                    <h3>Order top-up</h3><ul id="coreV2Orders"></ul>
+                    <p>Checkout top-up belum tersedia. Membuat order tidak memotong atau menambah saldo.</p>
+                    <form id="coreV2OrderForm" hidden>
+                        <label for="coreV2Product">Paket kredit</label><select id="coreV2Product"></select>
+                        <button type="submit" id="coreV2OrderSubmit">Buat order</button>
+                    </form>
+                </section>
+                {% endif %}
                 <header class="page-header"><h1>Akun</h1></header>
                 <div class="account-layout">
                     <section class="panel account-identity" aria-label="Profil Telegram">
@@ -1940,5 +1958,6 @@ dateRangeButton.addEventListener("click", function (e) {
 <script src="/static/analytics.js"></script>
 <script src="/static/navigation.js"></script>
 <script src="/static/export.js"></script>
+{% if core_v2_dashboard_enabled %}<script src="/static/core-v2.js"></script>{% endif %}
 </body>
 </html>

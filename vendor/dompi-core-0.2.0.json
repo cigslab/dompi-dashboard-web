@@ -1,0 +1,41 @@
+{
+  "baseline_commit": "3de191772ee50f36da6982088f31893f54cc84d7",
+  "build_script_sha256": "569bd8f57ee0cbb6a232593644c6ff980ad185fd33f0c0e3907dcc9e778d3561",
+  "distribution": "dompi-core",
+  "python": "3.14.7",
+  "reproducibility": "two-clean-builds-byte-identical",
+  "schema_version": 1,
+  "sha256": "e5e2068b616d3fc182303f387211da8106e4c58f189e69a352b5b51002e53e15",
+  "source_date_epoch": 1792509046,
+  "source_files_sha256": {
+    "build-requirements.txt": "ddb323d7fa11774858d43b35fbfc1bf24955bd3353726765a3c224c4f31ece31",
+    "pyproject.toml": "052383e5af950e42eede9d5ac314b11b5a4e37ac06571f6a703337f16e9d7523",
+    "src/dompi_core/__init__.py": "7d68854fcb7d4e9aaa943a9fd9e0db25fd6d8a4691f3a1d259f9c1b18da87a99",
+    "src/dompi_core/commerce.py": "1c90b8c4e52a5d22ae5ebdacb01706648bdabaa0804fc0cd5513d73a6acfbade",
+    "src/dompi_core/entitlements.py": "91720bb403a17c66bf16207e80c6c1f42a43dec79cf7d3a507e52ad771ed0ed3",
+    "src/dompi_core/errors.py": "40307d13f7e882d48d6a1594eadca2319b4e7025ab3cec3c466adcd426ff24c5",
+    "src/dompi_core/features.py": "b3be2f42a2790afce5233e332afe4ed50cab499b43e9eefa3ad2f051fa750283",
+    "src/dompi_core/policies.py": "a61298d3dea8097c2d726670da00ca4f5c219f87d08aa51340cb50fb4d33417e",
+    "src/dompi_core/storage/__init__.py": "9edc5bc8c48a39198797c76ad7045cef5e0a9f96c42e9b4ff3fb3e46811a609f",
+    "src/dompi_core/storage/commerce.py": "1f8baab74e6aea3a472b58198431f3392eed0abd081f24b493b9b66f23fe5d7c",
+    "src/dompi_core/storage/commerce_schema.py": "96c7d0bbe63a8a4a12e864be7a3c6844fdb2b532478b23cf00f9b01821defbdd",
+    "src/dompi_core/storage/link_schema.py": "b780ffa4b8f2b7b2ecff71dd705ba990e51e6b935f4ab178f38eede2b6044403",
+    "src/dompi_core/storage/linking.py": "f378d80b8781ad4e5cb805da3758ab5643fe8aa3824373fc39f150b983b18cb8",
+    "src/dompi_core/storage/postgres.py": "e8fa971f4ca25f0c111c4031cdce675ee22354eb02aedee942d88b22a934ba64",
+    "src/dompi_core/storage/schema.py": "321ade3af66e4b1a4c453d92755f9c2b633e89eab58a2dd08781c766388cda04",
+    "src/dompi_core/usage.py": "67842ab56e6ba89b76fafaed8fda239ff15168ba2a9ca40f6b47fdf3180cd05c"
+  },
+  "source_fingerprint_sha256": "890a619d0c12e867b545f65830442fa66559288d67c4b6e2ee559daea4d1be56",
+  "source_head": "32dd91545a55c5cd896d100a41695417435e3056",
+  "source_repository": "cigslab/dompi-bot",
+  "source_state": "working-tree-snapshot",
+  "tooling": {
+    "build": "1.3.0",
+    "packaging": "25.0",
+    "pyproject-hooks": "1.2.0",
+    "setuptools": "80.9.0",
+    "wheel": "0.45.1"
+  },
+  "version": "0.2.0",
+  "wheel": "dompi_core-0.2.0-py3-none-any.whl"
+}

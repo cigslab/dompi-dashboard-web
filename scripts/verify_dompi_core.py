@@ -11,9 +11,9 @@ def sha(data):
 
 
 def verify(root, source=None):
-    manifest = json.loads((root / 'vendor/dompi-core-0.1.0.json').read_text())
-    name = 'dompi_core-0.1.0-py3-none-any.whl'
-    if manifest['version'] != '0.1.0' or manifest['wheel'] != name:
+    manifest = json.loads((root / 'vendor/dompi-core-0.2.0.json').read_text())
+    name = 'dompi_core-0.2.0-py3-none-any.whl'
+    if manifest['version'] != '0.2.0' or manifest['wheel'] != name:
         raise ValueError('Unexpected Core version/artifact')
     wheel = root / 'vendor' / name
     if sha(wheel.read_bytes()) != manifest['sha256']:
@@ -24,15 +24,16 @@ def verify(root, source=None):
     if sha(json.dumps(files, sort_keys=True, separators=(',', ':')).encode()) != manifest['source_fingerprint_sha256']:
         raise ValueError('Source manifest fingerprint mismatch')
     with zipfile.ZipFile(wheel) as archive:
-        expected = {'dompi_core/__init__.py', 'dompi_core/entitlements.py',
-                    *('dompi_core-0.1.0.dist-info/' + n for n in ('METADATA', 'WHEEL', 'top_level.txt', 'RECORD'))}
+        modules = {n.removeprefix('src/') for n in files if n.startswith('src/')}
+        expected = {*modules,
+                    *('dompi_core-0.2.0.dist-info/' + n for n in ('METADATA', 'WHEEL', 'top_level.txt', 'RECORD'))}
         if set(archive.namelist()) != expected:
             raise ValueError('Unexpected wheel contents')
-        for name in ('dompi_core/__init__.py', 'dompi_core/entitlements.py'):
+        for name in modules:
             if sha(archive.read(name)) != files['src/' + name]:
                 raise ValueError('Wheel does not match source provenance')
-        metadata = archive.read('dompi_core-0.1.0.dist-info/METADATA').decode()
-        if 'Requires-Dist:' in metadata or '\nVersion: 0.1.0\n' not in metadata:
+        metadata = archive.read('dompi_core-0.2.0.dist-info/METADATA').decode()
+        if 'Requires-Dist:' in metadata or '\nVersion: 0.2.0\n' not in metadata:
             raise ValueError('Unexpected package metadata/dependencies')
     if source:
         actual_names = {'pyproject.toml', 'build-requirements.txt',
